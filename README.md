@@ -16,8 +16,9 @@ development pages there, with a live-reload script. Always run the build command
 ## Deploy
 
 `.github/workflows/deploy.yml` builds the site and deploys it to GitHub Pages on every push to
-`master`. You can also start it by hand under **Actions**. The workflow sets the base URL from the
-Pages settings, so it works at `https://stanuwu.github.io/SunriseDev/` and with a custom domain.
+`master`. You can also start it by hand under **Actions**. The site is served at
+`https://projectsunrise.dev/`. The workflow takes the base URL from the Pages settings, so after a
+change of domain, run it once to rebuild the links.
 
 The site can live in a subfolder, so never write a root path by hand in a template. Use `relURL`
 without a leading slash, or `.RelPermalink`. Markdown links and images that start with `/` are fixed
