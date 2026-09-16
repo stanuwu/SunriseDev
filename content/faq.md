@@ -64,7 +64,7 @@ edits `settings.json` for you.
 
 1. Find the bubble in the
    [bubble list](https://docs.google.com/spreadsheets/d/1SfEMoBs0aJO2ycs7-F5jLsjqP0EvTN_9ZA3vuXK__HI/edit?usp=sharing)
-   by Ledian00.
+   by [Breshi](https://www.youtube.com/@Breshi123).
 2. Press **Insert** to open the overlay.
 3. In the **Activity** module, select the activity from the list, then the bubble.
 4. On the same screen, set **Activity Override** to **Enabled**.
