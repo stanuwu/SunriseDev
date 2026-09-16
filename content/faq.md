@@ -1,6 +1,7 @@
 ---
 title: "FAQ"
 description: "Common questions and common problems with Sunrise."
+proseClass: "faq"
 ---
 
 ## Common issues

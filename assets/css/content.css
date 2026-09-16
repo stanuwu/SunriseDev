@@ -120,6 +120,13 @@
 .prose th, .prose td { border:1px solid var(--line); padding:8px 12px; text-align:left; }
 .prose th { color:#eef0f3; font-family:"Space Grotesk", sans-serif; }
 
+/* --- FAQ: section headings and questions stand out from the answers --- */
+.prose.faq h2 {
+  font-size:26px; margin:64px 0 8px; padding-bottom:12px; border-bottom:1px solid var(--line);
+}
+.prose.faq > h2:first-child { margin-top:28px; }
+.prose.faq h3 { font-size:18px; margin:34px 0 10px; }
+
 /* --- Mobile --- */
 @media (max-width: 800px) {
   .page-main { padding:130px 20px 80px; }

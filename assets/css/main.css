@@ -57,32 +57,39 @@ button { font: inherit; }
     starmap-drift-near 110s linear infinite,
     starmap-twinkle 7s ease-in-out infinite alternate;
 }
-/* Orbit rings. Each body sits 2px inside its ring so the box does not clip it. */
+/* Orbit rings, each with one body that turns with it. */
 .orbits {
   position: absolute; left: 75%; top: 8%; width: 76vmax; height: 76vmax;
   transform: translate(-50%, -50%); border-radius: 50%;
   border: 1px solid rgba(255,255,255,.035);
 }
-.orbits::before, .orbits::after {
-  content: ""; position: absolute; border-radius: 50%;
-}
-.orbits::before {
+.orbit { position: absolute; border-radius: 50%; }
+/* -0.5px centres the body on the 1px ring line, which lies outside the padding box. */
+.orbit-body { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); }
+.orbit-outer {
   inset: 16%; border: 1px dashed rgba(246,226,122,.12);
-  background:
-    radial-gradient(circle at 50% 2px, rgba(246,226,122,.85) 0 2px, transparent 3px) no-repeat;
   animation: spin 150s linear infinite;
 }
-.orbits::after {
+.orbit-outer .orbit-body {
+  left: 50%; top: -0.5px; width: 7px; height: 7px;
+  background: rgba(246,226,122,.9); box-shadow: 0 0 8px rgba(246,226,122,.45);
+}
+.orbit-inner {
   inset: 34%; border: 1px solid rgba(255,255,255,.06);
-  background:
-    radial-gradient(circle at 2px 50%, rgba(214,226,255,.8) 0 1.5px, transparent 2.5px) no-repeat;
   animation: spin 95s linear infinite reverse;
 }
+.orbit-inner .orbit-body {
+  left: -0.5px; top: 50%; width: 5px; height: 5px;
+  background: rgba(214,226,255,.85); box-shadow: 0 0 6px rgba(214,226,255,.35);
+}
+/* The constant tiny skew works around jerky movement in Firefox. */
 @keyframes starmap-drift-far {
-  to { transform: translate3d(280px, 280px, 0); }
+  from { transform: translate3d(0, 0, 0) skewX(0.1deg); }
+  to { transform: translate3d(280px, 280px, 0) skewX(0.1deg); }
 }
 @keyframes starmap-drift-near {
-  to { transform: translate3d(520px, 520px, 0); }
+  from { transform: translate3d(0, 0, 0) skewX(0.1deg); }
+  to { transform: translate3d(520px, 520px, 0) skewX(0.1deg); }
 }
 @keyframes starmap-twinkle {
   from { opacity: .45; }
@@ -241,7 +248,7 @@ button { font: inherit; }
 .disclaimer p { color:#737982; max-width:820px; font-size:12px; }
 
 @media (prefers-reduced-motion: reduce) {
-  .stars, .orbits::before, .orbits::after, .sun-logo-rays, .tab-panel.active { animation:none; }
+  .stars, .orbit, .sun-logo-rays, .tab-panel.active { animation:none; }
 }
 
 /* --- Mobile --- */

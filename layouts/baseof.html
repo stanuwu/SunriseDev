@@ -7,7 +7,10 @@
   <div class="starmap" aria-hidden="true">
     <div class="stars stars-far"></div>
     <div class="stars stars-near"></div>
-    <div class="orbits"></div>
+    <div class="orbits">
+      <div class="orbit orbit-outer"><span class="orbit-body"></span></div>
+      <div class="orbit orbit-inner"><span class="orbit-body"></span></div>
+    </div>
   </div>
   {{ partial "header.html" . }}
   {{ block "main" . }}{{ end }}

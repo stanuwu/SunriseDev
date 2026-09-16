@@ -4,7 +4,7 @@
   <article>
     <h1 class="article-heading">{{ .Title }}</h1>
     {{ if not .Date.IsZero }}<p class="article-meta">{{ .Date | time.Format ":date_long" }}{{ with .Params.author }} · {{ . }}{{ end }}</p>{{ end }}
-    <div class="prose">{{ .Content }}</div>
+    <div class="prose{{ with .Params.proseClass }} {{ . }}{{ end }}">{{ .Content }}</div>
   </article>
 </main>
 {{ end }}
