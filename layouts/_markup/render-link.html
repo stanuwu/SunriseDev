@@ -1,0 +1,7 @@
+{{- /* Adds the base path to root links like /faq/, for a site served from a subfolder. */ -}}
+{{- $dest := .Destination -}}
+{{- if and (strings.HasPrefix $dest "/") (not (strings.HasPrefix $dest "//")) -}}
+  {{- $dest = relURL (strings.TrimPrefix "/" $dest) -}}
+{{- end -}}
+<a href="{{ $dest | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text }}</a>
+{{- /* A newline after the tag would add a space after the link. */ -}}

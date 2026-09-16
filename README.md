@@ -13,6 +13,18 @@ hugo --minify --cleanDestinationDir    # build the site into public/
 development pages there, with a live-reload script. Always run the build command before you upload
 `public/`.
 
+## Deploy
+
+`.github/workflows/deploy.yml` builds the site and deploys it to GitHub Pages on every push to
+`master`. You can also start it by hand under **Actions**. The workflow sets the base URL from the
+Pages settings, so it works at `https://stanuwu.github.io/SunriseDev/` and with a custom domain.
+
+The site can live in a subfolder, so never write a root path by hand in a template. Use `relURL`
+without a leading slash, or `.RelPermalink`. Markdown links and images that start with `/` are fixed
+by `layouts/_markup/`; raw HTML in Markdown, such as `<video src="/...">`, is not.
+
+To change the Hugo version on the server, edit `HUGO_VERSION` in the workflow.
+
 | Path | Holds |
 |---|---|
 | `hugo.toml` | Site settings, links and the header menu |
@@ -22,6 +34,8 @@ development pages there, with a live-reload script. Always run the build command
 | `layouts/docs/` | Guides and docs pages with the sidebar |
 | `layouts/imprint.html` | Imprint & Credits page; owner data is in `hugo.toml` `[params.imprint]` |
 | `layouts/_partials/` | Header, footer, cards, docs sidebar and `icon.html` |
+| `layouts/_markup/` | Link and image rendering for Markdown |
+| `.github/workflows/deploy.yml` | Build and deploy to GitHub Pages |
 | `assets/css/`, `assets/js/` | Styles and script, bundled at build time |
 | `assets/icons/` | Icon SVGs from Tabler Icons, one file per icon |
 | `static/images/` | Logos and page images |

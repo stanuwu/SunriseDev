@@ -1,0 +1,7 @@
+{{- /* Adds the base path to root paths like /images/x.png, for a site in a subfolder. */ -}}
+{{- $src := .Destination -}}
+{{- if and (strings.HasPrefix $src "/") (not (strings.HasPrefix $src "//")) -}}
+  {{- $src = relURL (strings.TrimPrefix "/" $src) -}}
+{{- end -}}
+<img src="{{ $src | safeURL }}" alt="{{ .PlainText }}"{{ with .Title }} title="{{ . }}"{{ end }}>
+{{- /* A newline after the tag would add a space after the image. */ -}}
