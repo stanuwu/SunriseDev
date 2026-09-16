@@ -1,0 +1,10 @@
+{{ define "main" }}
+<main class="page-main narrow">
+  {{ with .Parent }}{{ if not .IsHome }}<a class="back-link" href="{{ .RelPermalink }}">← All {{ .Title | lower }}</a>{{ end }}{{ end }}
+  <article>
+    <h1 class="article-heading">{{ .Title }}</h1>
+    {{ if not .Date.IsZero }}<p class="article-meta">{{ .Date | time.Format ":date_long" }}{{ with .Params.author }} · {{ . }}{{ end }}</p>{{ end }}
+    <div class="prose">{{ .Content }}</div>
+  </article>
+</main>
+{{ end }}

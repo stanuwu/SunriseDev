@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  {{ partial "head.html" . }}
+</head>
+<body>
+  <div class="starmap" aria-hidden="true">
+    <div class="stars stars-far"></div>
+    <div class="stars stars-near"></div>
+    <div class="orbits"></div>
+  </div>
+  {{ partial "header.html" . }}
+  {{ block "main" . }}{{ end }}
+  {{ partial "footer.html" . }}
+  {{ $js := resources.Get "js/site.js" | minify | fingerprint }}
+  <script src="{{ $js.RelPermalink }}" defer></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{{ $gh := printf "https://github.com/%s" site.Params.githubRepo }}
+<footer class="footer">
+  <div class="brand"><img class="brand-logo footer-logo" src="{{ "images/sunrise-main-logo.png" | relURL }}" alt=""><span>SUNRISE</span></div>
+  <div class="footer-links">
+    <a href="{{ $gh }}" target="_blank" rel="noopener">GitHub</a>
+    <a href="{{ site.Params.discord }}" target="_blank" rel="noopener">Discord</a>
+    <a href="{{ "imprint/" | relURL }}">Imprint &amp; Credits</a>
+  </div>
+  <span class="footer-heart">{{ partial "icon.html" (dict "name" "heart" "size" 16) }}</span>
+</footer>

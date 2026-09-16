@@ -1,0 +1,186 @@
+{{ define "main" }}
+{{ $gh := printf "https://github.com/%s" site.Params.githubRepo }}
+{{ $stats := site.Params.stats }}
+<main>
+  <section class="hero">
+    <div class="hero-content">
+      <p class="eyebrow"><span class="pulse"></span> OPEN SOURCE • WORK IN PROGRESS</p>
+      <h1>Sunrise</h1>
+      <p class="hero-copy">A community-built preservation and restoration mod for Destiny 2. Load into destinations, play missions, and more with no servers.</p>
+      <div class="hero-actions">
+        <a class="button button-primary" href="{{ "guides/installing/" | relURL }}">Install Sunrise →</a>
+        <a class="button button-ghost" href="{{ $gh }}" target="_blank" rel="noopener">View source ↗</a>
+      </div>
+      <p class="hero-note">Free &amp; open source · Runs locally · Bring your own game files</p>
+    </div>
+
+    <div class="hero-sun-art" aria-hidden="true">
+      <div class="sun-rays-window">
+        <div class="sun-logo-rays">
+          <img src="{{ "images/sunrise-rays.png" | relURL }}" alt="">
+        </div>
+      </div>
+      <div class="sun-logo-fixed">
+        <img src="{{ "images/sunrise-logo-core.png" | relURL }}" alt="">
+      </div>
+    </div>
+  </section>
+
+  <section class="section about" id="about">
+    <div class="section-heading">
+      <span class="section-kicker">01 / ABOUT</span>
+      <h2>Bringing content back from the grave.</h2>
+    </div>
+    <div class="about-copy">
+      <p>Sunrise installs onto an old build of Destiny 2 and lets you experience all its content once again, without requiring a server. It is designed to visit old destinations, replay old campaigns and experience the state of the game before sunsetting, not as a replacement for the live game.</p>
+      <p>The project is open source and does not contain any game data. Some features are WIP or not present yet (most missions, p2p multiplayer, full progression, ...)</p>
+      <div class="stat-row">
+        <div><b>{{ $stats.stars }}</b><span>GitHub stars</span></div>
+        <div><b>{{ $stats.forks }}</b><span>Forks</span></div>
+        <div><b>{{ $stats.release }}</b><span>Latest release</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section features" id="features">
+    <div class="section-heading centered">
+      <span class="section-kicker">02 / FEATURES</span>
+      <h2>Built for offline.</h2>
+      <p>Sunrise focuses on giving as much of the full Destiny experience as possible offline. This means no hosting costs and no end of service.</p>
+    </div>
+
+    <div class="feature-tabs">
+      <div class="tab-nav" role="tablist">
+        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="0"><span class="feature-number">01</span> Save Files</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="1"><span class="feature-number">02</span> Modding Support</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="2"><span class="feature-number">03</span> LAN Multiplayer</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="3"><span class="feature-number">04</span> Open Source</button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="4"><span class="feature-number">05</span> Free Forever</button>
+      </div>
+      <div class="tab-panels">
+        <article class="tab-panel active" data-panel="0">
+          <div class="icon">{{ partial "icon.html" (dict "name" "files" "size" 38 "stroke" 1.5) }}</div>
+          <h3>Save Files</h3>
+          <p>Save files are stored locally for each player. Progress at your own pace without worries.</p>
+        </article>
+        <article class="tab-panel" data-panel="1">
+          <div class="icon">{{ partial "icon.html" (dict "name" "settings" "size" 38 "stroke" 1.5) }}</div>
+          <h3>Modding Support</h3>
+          <p>Change the game in new ways or download mods that others made. (WIP)</p>
+        </article>
+        <article class="tab-panel" data-panel="2">
+          <div class="icon">{{ partial "icon.html" (dict "name" "router" "size" 38 "stroke" 1.5) }}</div>
+          <h3>LAN Multiplayer</h3>
+          <p>Play with friends locally, connect directly to their game with no servers required. (WIP)</p>
+        </article>
+        <article class="tab-panel" data-panel="3">
+          <div class="icon">{{ partial "icon.html" (dict "name" "code" "size" 38 "stroke" 1.5) }}</div>
+          <h3>Open Source</h3>
+          <p>Inspect the code, report bugs and contribute improvements. Full transparency all the way.</p>
+        </article>
+        <article class="tab-panel" data-panel="4">
+          <div class="icon">{{ partial "icon.html" (dict "name" "currency-dollar-off" "size" 38 "stroke" 1.5) }}</div>
+          <h3>Free Forever</h3>
+          <p>There will never be any paid options for Sunrise. No cosmetics, no early access and no Discord roles.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="section download" id="download">
+    <div class="download-panel">
+      <div>
+        <span class="section-kicker">03 / GET SUNRISE</span>
+        <h2>Ready to explore?</h2>
+        <p>Follow the install guide to download the game and set up Sunrise.</p>
+      </div>
+      <div class="release-box">
+        <div class="release-meta">
+          <span>Latest release</span>
+          <strong>Sunrise {{ $stats.release }}</strong>
+        </div>
+        <div class="release-meta">
+          <span>Total downloads</span>
+          <strong>{{ $stats.downloads }}</strong>
+        </div>
+        <a class="button button-primary" href="{{ "guides/installing/" | relURL }}">Install guide →</a>
+      </div>
+    </div>
+  </section>
+
+  {{ with (where site.RegularPages "Section" "updates").ByDate.Reverse | first 3 }}
+  <section class="section latest-updates" id="updates">
+    <div class="section-heading">
+      <span class="section-kicker">04 / UPDATES</span>
+      <h2>Latest from the project.</h2>
+    </div>
+    <div class="card-list">
+      {{ range . }}{{ partial "card.html" . }}{{ end }}
+    </div>
+    <a class="button button-ghost more-link" href="{{ "updates/" | relURL }}">All updates →</a>
+  </section>
+  {{ end }}
+
+  <section class="section">
+    <div class="feature-tabs">
+      <div class="tab-nav" role="tablist">
+        <button class="tab-btn active" role="tab" aria-selected="true" data-tab="0">
+          {{ partial "icon.html" (dict "name" "book" "size" 16) }}
+          Guides
+        </button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="1">
+          {{ partial "icon.html" (dict "name" "file-text" "size" 16) }}
+          Documentation
+        </button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="2">
+          {{ partial "icon.html" (dict "name" "brand-github" "size" 16) }}
+          GitHub
+        </button>
+        <button class="tab-btn" role="tab" aria-selected="false" data-tab="3">
+          {{ partial "icon.html" (dict "name" "brand-discord" "size" 16) }}
+          Discord
+        </button>
+      </div>
+      <div class="tab-panels">
+        <article class="tab-panel active" data-panel="0">
+          <div class="icon icon-gold">
+            {{ partial "icon.html" (dict "name" "book" "size" 38 "stroke" 1.5) }}
+          </div>
+          <h3>Guides</h3>
+          <p>Step-by-step guides for downloading, installing, and setting up Sunrise.</p>
+          <a class="button button-primary" href="{{ "guides/" | relURL }}">Read the guides →</a>
+        </article>
+        <article class="tab-panel" data-panel="1">
+          <div class="icon icon-green">
+            {{ partial "icon.html" (dict "name" "file-text" "size" 38 "stroke" 1.5) }}
+          </div>
+          <h3>Documentation</h3>
+          <p>Reference pages on how Sunrise works and how to contribute to the project.</p>
+          <a class="button button-primary" href="{{ "docs/" | relURL }}">Visit documentation →</a>
+        </article>
+        <article class="tab-panel" data-panel="2">
+          <div class="icon icon-white">
+            {{ partial "icon.html" (dict "name" "brand-github" "size" 38 "stroke" 1.5) }}
+          </div>
+          <h3>GitHub</h3>
+          <p>Browse the source, open issues, submit pull requests, and follow development as it happens.</p>
+          <a class="button button-primary" href="{{ $gh }}" target="_blank" rel="noopener">Visit GitHub ↗</a>
+        </article>
+        <article class="tab-panel" data-panel="3">
+          <div class="icon icon-indigo">
+            {{ partial "icon.html" (dict "name" "brand-discord" "size" 38 "stroke" 1.5) }}
+          </div>
+          <h3>Discord</h3>
+          <p>Join the community for announcements, support, and to chat with other players and contributors.</p>
+          <a class="button button-primary" href="{{ site.Params.discord }}" target="_blank" rel="noopener">Join Discord ↗</a>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="disclaimer">
+    <span class="section-kicker">IMPORTANT</span>
+    <p>Sunrise is not affiliated with Bungie or Sony. It is not a crack, cheat, or custom server. Sunrise requires your own copy of Destiny 2.</p>
+  </section>
+</main>
+{{ end }}

@@ -1,0 +1,25 @@
+{{ define "main" }}
+{{- /* Owner data is in hugo.toml [params.imprint]. Production builds fail while it is empty. */ -}}
+{{- $i := site.Params.imprint | default dict -}}
+{{- $missing := slice -}}
+{{- range slice "owner" "residence" -}}
+  {{- if not (index $i .) }}{{ $missing = $missing | append . }}{{ end -}}
+{{- end -}}
+{{- with $missing -}}
+  {{- $msg := printf "Imprint: set params.imprint %s in hugo.toml" (delimit . ", ") -}}
+  {{- if hugo.IsProduction }}{{ errorf "%s" $msg }}{{ else }}{{ warnf "%s" $msg }}{{ end -}}
+{{- end -}}
+<main class="page-main narrow">
+  <article>
+    <h1 class="article-heading">{{ .Title }}</h1>
+    <p class="article-meta">Disclosure under § 25 of the Austrian Media Act (<span lang="de">Offenlegung gemäß § 25 MedienG</span>)</p>
+    <dl class="imprint">
+      <dt lang="de">Medieninhaber und Herausgeber</dt>
+      <dd>{{ with $i.owner }}{{ . }}{{ else }}<span class="imprint-missing">missing: params.imprint.owner</span>{{ end }}</dd>
+      <dt lang="de">Wohnort</dt>
+      <dd>{{ with $i.residence }}{{ . }}{{ else }}<span class="imprint-missing">missing: params.imprint.residence</span>{{ end }}</dd>
+    </dl>
+    <div class="prose">{{ .Content }}</div>
+  </article>
+</main>
+{{ end }}

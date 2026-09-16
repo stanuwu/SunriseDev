@@ -1,0 +1,21 @@
+{{ define "main" }}
+<main class="page-main narrow">
+  <span class="section-kicker gold-kicker">{{ .Title | upper }}</span>
+  <h1 class="page-heading">{{ .Params.heading | default .Title }}</h1>
+  {{ with .Description }}<p class="page-subheading">{{ . }}</p>{{ end }}
+  {{ with .Content }}<div class="prose section-intro">{{ . }}</div>{{ end }}
+
+  {{ $pager := .Paginate .Pages.ByDate.Reverse }}
+  <div class="card-list">
+    {{ range $pager.Pages }}{{ partial "card.html" . }}{{ else }}<p class="empty">Nothing here yet.</p>{{ end }}
+  </div>
+
+  {{ if gt $pager.TotalPages 1 }}
+  <nav class="pager">
+    {{ with $pager.Prev }}<a href="{{ .URL }}">← Newer</a>{{ else }}<span></span>{{ end }}
+    <span>Page {{ $pager.PageNumber }} of {{ $pager.TotalPages }}</span>
+    {{ with $pager.Next }}<a href="{{ .URL }}">Older →</a>{{ else }}<span></span>{{ end }}
+  </nav>
+  {{ end }}
+</main>
+{{ end }}

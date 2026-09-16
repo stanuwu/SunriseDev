@@ -1,0 +1,23 @@
+{{ $page := . }}
+<header class="site-header">
+  <a class="brand" href="{{ "/" | relURL }}" aria-label="Sunrise home">
+    <img class="brand-logo" src="{{ "images/sunrise-main-logo.png" | relURL }}" alt="Sunrise sun emblem">
+    <span>SUNRISE</span>
+  </a>
+
+  <button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">
+    <span></span><span></span><span></span>
+  </button>
+
+  <nav class="nav">
+    {{ range site.Menus.main }}
+      {{ $external := strings.HasPrefix .URL "http" }}
+      {{ $inSection := and .Page (ne .Page.Section "") (eq .Page.Section $page.Section) }}
+      {{ $isPage := and .Page (not .Page.IsHome) (.Page.Eq $page) }}
+      {{ $active := or $inSection $isPage }}
+      <a href="{{ if $external }}{{ .URL }}{{ else }}{{ .URL | relURL }}{{ end }}"
+        {{- if $active }} class="active" aria-current="page"{{ end }}
+        {{- if $external }} target="_blank" rel="noopener"{{ end }}>{{ .Name }}</a>
+    {{ end }}
+  </nav>
+</header>

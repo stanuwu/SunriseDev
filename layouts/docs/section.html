@@ -1,0 +1,23 @@
+{{ define "main" }}
+<main class="page-main">
+  <div class="docs-layout">
+    {{ partial "docs-sidebar.html" . }}
+    <article class="docs-content">
+      <span class="section-kicker gold-kicker">{{ .FirstSection.Title | upper }}</span>
+      <h1 class="article-heading">{{ .Title }}</h1>
+      {{ with .Description }}<p class="page-subheading">{{ . }}</p>{{ end }}
+      {{ with .Content }}<div class="prose section-intro">{{ . }}</div>{{ end }}
+      {{ $both := and .Sections .RegularPages }}
+      {{ with .Sections }}
+      {{ if $both }}<h2 class="section-kicker list-label">SECTIONS</h2>{{ end }}
+      <div class="card-list">{{ range . }}{{ partial "card.html" . }}{{ end }}</div>
+      {{ end }}
+      {{ with .RegularPages }}
+      {{ if $both }}<h2 class="section-kicker list-label">MORE PAGES</h2>{{ end }}
+      <div class="card-list">{{ range . }}{{ partial "card.html" . }}{{ end }}</div>
+      {{ end }}
+      {{ if not (or .Sections .RegularPages) }}<p class="empty">Nothing here yet.</p>{{ end }}
+    </article>
+  </div>
+</main>
+{{ end }}

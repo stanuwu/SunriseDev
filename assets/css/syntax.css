@@ -1,0 +1,14 @@
+/* Code block colors for Hugo's highlighter, in the site palette. */
+.prose .chroma { color:#c3c7cd; }
+.chroma .c, .chroma .c1, .chroma .ch, .chroma .cm, .chroma .cp, .chroma .cpf, .chroma .cs { color:#656b74; font-style:italic; }
+.chroma .k, .chroma .kc, .chroma .kd, .chroma .kn, .chroma .kp, .chroma .kr, .chroma .kt, .chroma .ow { color:#f6e27a; }
+.chroma .s, .chroma .s1, .chroma .s2, .chroma .sa, .chroma .sb, .chroma .sc, .chroma .sd, .chroma .se,
+.chroma .sh, .chroma .si, .chroma .sr, .chroma .ss, .chroma .sx, .chroma .dl { color:#a8d4a0; }
+.chroma .m, .chroma .mb, .chroma .mf, .chroma .mh, .chroma .mi, .chroma .il, .chroma .mo { color:#e3a86f; }
+.chroma .nf, .chroma .fm, .chroma .nc, .chroma .nn { color:#8fb8f0; }
+.chroma .nb, .chroma .bp, .chroma .nt { color:#cb9b51; }
+.chroma .na, .chroma .nv, .chroma .vi, .chroma .vg { color:#e3c98a; }
+.chroma .o, .chroma .p { color:#969ba5; }
+.chroma .gd { color:#e8a4a4; }
+.chroma .gi { color:#8fd19e; }
+.chroma .err { color:#e8a4a4; }

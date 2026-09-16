@@ -1,0 +1,26 @@
+{{ $page := . }}
+{{ $section := .FirstSection }}
+<aside class="docs-sidebar">
+  {{ with $section.RegularPages }}
+  <div class="docs-category">
+    <a class="docs-category-name{{ if $page.Eq $section }} active{{ end }}" href="{{ $section.RelPermalink }}">{{ $section.Title }}</a>
+    <ul class="docs-nav-list">
+      {{ range . }}
+      <li><a class="docs-nav-item{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+      {{ end }}
+    </ul>
+  </div>
+  {{ end }}
+  {{ range $section.Sections }}
+  <div class="docs-category">
+    <a class="docs-category-name{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .Title }}</a>
+    <ul class="docs-nav-list">
+      {{ range .RegularPages }}
+      <li><a class="docs-nav-item{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+      {{ else }}
+      <li class="docs-nav-empty">No pages yet.</li>
+      {{ end }}
+    </ul>
+  </div>
+  {{ end }}
+</aside>

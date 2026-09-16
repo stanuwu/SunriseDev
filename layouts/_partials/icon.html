@@ -1,0 +1,16 @@
+{{- /* Renders assets/icons/<name>.svg, a Tabler icon (MIT), at the given size and stroke. */ -}}
+{{- $file := printf "icons/%s.svg" .name -}}
+{{- $size := .size | default 24 -}}
+{{- $stroke := .stroke | default 2 -}}
+{{- with resources.Get $file -}}
+  {{- $svg := .Content -}}
+  {{- /* Limit 1: only the first match, which is on the <svg> tag. */ -}}
+  {{- $svg = replaceRE `\swidth="[^"]*"` (printf ` width="%v"` $size) $svg 1 -}}
+  {{- $svg = replaceRE `\sheight="[^"]*"` (printf ` height="%v"` $size) $svg 1 -}}
+  {{- $svg = replaceRE `\sstroke-width="[^"]*"` (printf ` stroke-width="%v"` $stroke) $svg 1 -}}
+  {{- /* Tabler's class="icon" would pick up the page's .icon styles. */ -}}
+  {{- $svg = replaceRE `\sclass="[^"]*"` ` aria-hidden="true"` $svg 1 -}}
+  {{- $svg | safeHTML -}}
+{{- else -}}
+  {{- errorf "icon.html: assets/%s not found. Download it from https://tabler.io/icons" $file -}}
+{{- end -}}

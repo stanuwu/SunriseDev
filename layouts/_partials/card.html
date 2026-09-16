@@ -1,0 +1,10 @@
+<a class="card" href="{{ .RelPermalink }}">
+  {{ if .IsSection }}
+  <div class="card-date">{{ with len .RegularPages }}{{ . }} {{ cond (eq . 1) "page" "pages" }}{{ else }}No pages yet{{ end }}</div>
+  {{ else if not .Date.IsZero }}
+  <div class="card-date">{{ .Date | time.Format ":date_long" }}</div>
+  {{ end }}
+  <h2>{{ .Title }}</h2>
+  <p>{{ .Description | default (.Summary | plainify | truncate 220) }}</p>
+  <span class="card-more">{{ if .IsSection }}Open section{{ else }}Read more{{ end }} <span>→</span></span>
+</a>

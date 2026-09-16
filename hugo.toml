@@ -1,0 +1,67 @@
+baseURL = "/"
+locale = "en-us"
+title = "Sunrise"
+
+disableHugoGeneratorInject = true
+disableKinds = ["taxonomy", "term"]
+
+# The layouts use the template layout introduced in Hugo 0.146.
+[module.hugoVersion]
+  min = "0.146.0"
+
+[params]
+  description = "A community-built preservation and restoration mod for Destiny 2. Play it offline, with no servers."
+  githubRepo = "stanuwu/Sunrise"
+  discord = "https://discord.com/invite/projectsunrise"
+
+# Landing page numbers. Update them by hand; the site makes no calls to GitHub.
+[params.stats]
+  stars = "1,100+"
+  forks = "200+"
+  downloads = "35,000+"
+  release = "0.3.2"
+
+# Imprint data (section 25 MedienG). The production build fails while owner or residence is empty.
+[params.imprint]
+  owner = "Stanislaus Dusek"
+  residence = "Wien"
+
+[pagination]
+  pagerSize = 10
+
+# Content is written by the team, so raw HTML such as <video> is allowed.
+[markup.goldmark.renderer]
+  unsafe = true
+
+# Code colors come from assets/css/syntax.css.
+[markup.highlight]
+  noClasses = false
+
+# The youtube shortcode uses YouTube's privacy-enhanced mode (youtube-nocookie.com).
+[privacy.youtube]
+  privacyEnhanced = true
+
+[[menus.main]]
+  name = "Home"
+  pageRef = "/"
+  weight = 10
+[[menus.main]]
+  name = "Updates"
+  pageRef = "/updates"
+  weight = 20
+[[menus.main]]
+  name = "Guides"
+  pageRef = "/guides"
+  weight = 30
+[[menus.main]]
+  name = "Docs"
+  pageRef = "/docs"
+  weight = 40
+[[menus.main]]
+  name = "FAQ"
+  pageRef = "/faq"
+  weight = 50
+[[menus.main]]
+  name = "GitHub ↗"
+  url = "https://github.com/stanuwu/Sunrise"
+  weight = 60

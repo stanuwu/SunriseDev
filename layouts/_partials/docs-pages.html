@@ -1,0 +1,7 @@
+{{- /* Returns a section's pages in sidebar order: its own pages, then each subsection's. */ -}}
+{{- $pages := slice -}}
+{{- range .RegularPages -}}{{- $pages = $pages | append . -}}{{- end -}}
+{{- range .Sections -}}
+  {{- range .RegularPages -}}{{- $pages = $pages | append . -}}{{- end -}}
+{{- end -}}
+{{- return $pages -}}

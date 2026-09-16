@@ -1,0 +1,16 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="{{ .Description | default site.Params.description }}">
+<title>{{ if .IsHome }}{{ site.Title }} — Offline Exploration Mod{{ else }}{{ .Title }} · {{ site.Title }}{{ end }}</title>
+<link rel="icon" type="image/png" href="{{ "images/sunrise-main-logo.png" | relURL }}">
+{{ with .OutputFormats.Get "rss" }}
+<link rel="alternate" type="application/rss+xml" href="{{ .RelPermalink }}" title="{{ site.Title }}">
+{{ end }}
+{{ $sheets := slice
+  (resources.Get "css/fonts.css")
+  (resources.Get "css/main.css")
+  (resources.Get "css/content.css")
+  (resources.Get "css/syntax.css")
+}}
+{{ $css := $sheets | resources.Concat "css/site.css" | minify | fingerprint }}
+<link rel="stylesheet" href="{{ $css.RelPermalink }}">

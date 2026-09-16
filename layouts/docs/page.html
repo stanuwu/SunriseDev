@@ -1,0 +1,30 @@
+{{ define "main" }}
+{{ $page := . }}
+{{- /* The pages just before and after this one, in sidebar order. */ -}}
+{{ $prev := false }}
+{{ $next := false }}
+{{ $found := false }}
+{{ range partial "docs-pages.html" .FirstSection }}
+  {{ if $found }}{{ if not $next }}{{ $next = . }}{{ end }}
+  {{ else if $page.Eq . }}{{ $found = true }}
+  {{ else }}{{ $prev = . }}{{ end }}
+{{ end }}
+<main class="page-main">
+  <div class="docs-layout">
+    {{ partial "docs-sidebar.html" . }}
+    <article class="docs-content">
+      <span class="section-kicker gold-kicker">{{ .CurrentSection.Title | upper }}</span>
+      <h1 class="article-heading">{{ .Title }}</h1>
+      {{ if not .Lastmod.IsZero }}<p class="article-meta">Last updated {{ .Lastmod | time.Format ":date_long" }}</p>{{ end }}
+      <div class="prose">{{ .Content }}</div>
+
+      {{ if or $prev $next }}
+      <nav class="docs-pager">
+        {{ with $prev }}<a class="docs-pager-link" href="{{ .RelPermalink }}"><span>← Previous</span>{{ .LinkTitle }}</a>{{ else }}<span></span>{{ end }}
+        {{ with $next }}<a class="docs-pager-link next" href="{{ .RelPermalink }}"><span>Next →</span>{{ .LinkTitle }}</a>{{ end }}
+      </nav>
+      {{ end }}
+    </article>
+  </div>
+</main>
+{{ end }}
