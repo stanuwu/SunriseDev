@@ -42,34 +42,20 @@ button { font: inherit; }
   -webkit-mask-image: radial-gradient(ellipse at 60% 30%, #000 10%, transparent 70%);
   mask-image: radial-gradient(ellipse at 60% 30%, #000 10%, transparent 70%);
 }
-/* A layer is one tile larger than the screen and moves one tile per loop, so it has no seam. */
-.stars { position: absolute; will-change: transform; }
+/* A layer is one tile larger than the screen and moves one tile per loop, so it has no seam.
+   The tile size is repeated in the inset and the keyframes; image tiles keep Firefox fast. */
+.stars { position: absolute; }
 .stars-far {
-  --tile: 280px;
-  inset: calc(-1 * var(--tile)) 0 0 calc(-1 * var(--tile));
-  background-size: var(--tile) var(--tile);
-  background-image:
-    radial-gradient(1px 1px at 17px 31px, rgba(255,255,255,.7), transparent),
-    radial-gradient(1px 1px at 97px 143px, rgba(255,255,255,.5), transparent),
-    radial-gradient(1px 1px at 171px 63px, rgba(255,255,255,.6), transparent),
-    radial-gradient(1px 1px at 229px 199px, rgba(214,226,255,.55), transparent),
-    radial-gradient(1px 1px at 53px 223px, rgba(255,255,255,.45), transparent),
-    radial-gradient(1px 1px at 139px 257px, rgba(255,255,255,.5), transparent),
-    radial-gradient(1px 1px at 263px 17px, rgba(255,240,210,.55), transparent),
-    radial-gradient(1px 1px at 199px 113px, rgba(255,255,255,.35), transparent);
-  animation: starmap-drift 160s linear infinite;
+  inset: -280px 0 0 -280px;
+  background: url("../images/stars-far.svg") 0 0 / 280px 280px;
+  animation: starmap-drift-far 160s linear infinite;
 }
 .stars-near {
-  --tile: 520px;
-  inset: calc(-1 * var(--tile)) 0 0 calc(-1 * var(--tile));
-  background-size: var(--tile) var(--tile);
-  background-image:
-    radial-gradient(1.5px 1.5px at 61px 89px, #fff, transparent),
-    radial-gradient(2px 2px at 311px 47px, rgba(246,226,122,.9), transparent),
-    radial-gradient(1.5px 1.5px at 437px 283px, rgba(214,226,255,.9), transparent),
-    radial-gradient(1.5px 1.5px at 173px 397px, #fff, transparent),
-    radial-gradient(2px 2px at 383px 471px, rgba(255,255,255,.8), transparent);
-  animation: starmap-drift 110s linear infinite, starmap-twinkle 7s ease-in-out infinite alternate;
+  inset: -520px 0 0 -520px;
+  background: url("../images/stars-near.svg") 0 0 / 520px 520px;
+  animation:
+    starmap-drift-near 110s linear infinite,
+    starmap-twinkle 7s ease-in-out infinite alternate;
 }
 /* Orbit rings. Each body sits 2px inside its ring so the box does not clip it. */
 .orbits {
@@ -78,7 +64,7 @@ button { font: inherit; }
   border: 1px solid rgba(255,255,255,.035);
 }
 .orbits::before, .orbits::after {
-  content: ""; position: absolute; border-radius: 50%; will-change: transform;
+  content: ""; position: absolute; border-radius: 50%;
 }
 .orbits::before {
   inset: 16%; border: 1px dashed rgba(246,226,122,.12);
@@ -92,8 +78,11 @@ button { font: inherit; }
     radial-gradient(circle at 2px 50%, rgba(214,226,255,.8) 0 1.5px, transparent 2.5px) no-repeat;
   animation: spin 95s linear infinite reverse;
 }
-@keyframes starmap-drift {
-  to { transform: translate3d(var(--tile), var(--tile), 0); }
+@keyframes starmap-drift-far {
+  to { transform: translate3d(280px, 280px, 0); }
+}
+@keyframes starmap-drift-near {
+  to { transform: translate3d(520px, 520px, 0); }
 }
 @keyframes starmap-twinkle {
   from { opacity: .45; }
@@ -107,7 +96,7 @@ button { font: inherit; }
 .site-header {
   height: 76px; position: fixed; top: 0; left: 0; right: 0; z-index: 20;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 0 5vw; background: rgba(8,9,11,.72); backdrop-filter: blur(16px);
+  padding: 0 5vw; background: rgba(8,9,11,.92);
   border-bottom: 1px solid rgba(255,255,255,.07);
 }
 .brand {
