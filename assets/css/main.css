@@ -201,6 +201,25 @@ button { font: inherit; }
   font-size:10px; text-transform:uppercase; letter-spacing:.1em;
 }
 
+.team .section-heading { margin-bottom:55px; }
+/* The 1px gap lets the grid background draw the divider lines. */
+.team-grid {
+  display:grid; grid-template-columns:repeat(4,1fr);
+  gap:1px; background:var(--line); border:1px solid var(--line);
+}
+.team-member { background:var(--bg); padding:34px 26px; }
+.team-member h3 { font:700 22px "Space Grotesk", sans-serif; margin:0 0 7px; color:#eef0f3; }
+.team-member p { color:#9298a1; font-size:14px; margin:0; }
+.team-member .team-role {
+  margin:0 0 14px; color:var(--gold); font-weight:700;
+  font-size:10px; text-transform:uppercase; letter-spacing:.12em;
+}
+.team-link {
+  display:inline-flex; align-items:center; gap:7px; margin-top:18px;
+  color:#e3c98a; font-size:13px; font-weight:700; transition:.2s;
+}
+.team-link:hover { color:var(--gold-bright); }
+
 .feature-tabs { border-top:1px solid var(--line); }
 .tab-nav { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); }
 .tab-btn {
@@ -279,6 +298,7 @@ button { font: inherit; }
   }
 
   .about { grid-template-columns:1fr; gap:45px; }
+  .team-grid { grid-template-columns:1fr 1fr; }
   .stat-row { gap:10px; }
   .stat-row div { padding:18px 8px 0 0; }
   .stat-row b { font-size:22px; }
@@ -298,6 +318,7 @@ button { font: inherit; }
   .hero h1 { font-size:60px; }
   .hero-actions { flex-direction:column; align-items:stretch; }
   .hero-actions .button { width:100%; }
+  .team-grid { grid-template-columns:1fr; }
   .stat-row { grid-template-columns:1fr 1fr; row-gap:20px; }
   .stat-row div:nth-child(3) { grid-column:span 2; }
 }

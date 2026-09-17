@@ -16,10 +16,10 @@ disableKinds = ["taxonomy", "term"]
 
 # Landing page numbers. Update them by hand; the site makes no calls to GitHub.
 [params.stats]
-  stars = "1,100+"
-  forks = "200+"
-  downloads = "35,000+"
-  release = "0.3.2"
+  stars = "1,150+"
+  forks = "230+"
+  downloads = "38,000+"
+  release = "0.5.0"
 
 # Imprint data (section 25 MedienG). The production build fails while owner or residence is empty.
 [params.imprint]

@@ -45,7 +45,28 @@ also repairs and updates an existing install, including one made with the old in
 
 3. Download the latest DLL from the [Sunrise releases](https://github.com/stanuwu/Sunrise/releases/latest).
 4. In the game folder, replace `bin\x64\steam_api64.dll` with the downloaded file.
-5. Start the game with `destiny2.exe` in the game folder.
+5. Install the mission scripts. They hold the scripted missions. Put them in
+   `bin\x64\Sunrise\scripts` inside the game folder.
+
+   With git, clone the repository straight into that folder:
+
+   ```powershell
+   git clone https://github.com/stanuwu/SunriseMissions.git "<install-location>\bin\x64\Sunrise\scripts"
+   ```
+
+   Without git, download
+   [the scripts as a ZIP](https://github.com/stanuwu/SunriseMissions/archive/refs/heads/main.zip)
+   and unzip it. The ZIP contains one folder; copy everything **inside** it into
+   `bin\x64\Sunrise\scripts`. When it is right, the file
+   `bin\x64\Sunrise\scripts\lib\flow.lua` exists.
+
+6. Start the game with `destiny2.exe` in the game folder.
+
+The game reads that folder directly, so a script change needs no new version of Sunrise. Update the
+scripts later with `git pull`, or by downloading the ZIP again.
+
+Without the scripts the game still runs, but missions load with nothing scripted in them. To write
+your own, see the [Mission Scripting docs](/docs/mission-scripting/).
 
 ## Get help
 
