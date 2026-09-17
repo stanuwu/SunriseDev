@@ -1,7 +1,7 @@
 ---
 title: "Installing Sunrise"
 date: 2026-09-16
-description: "Install Destiny 2 and Sunrise, with the installer or by hand."
+description: "Install Destiny 2 and Sunrise, with the launcher or by hand."
 weight: 10
 ---
 
@@ -21,9 +21,12 @@ We also recommend:
 - Add the game folder as an exclusion in [Windows Defender](/guides/windows-security/#windows-defender).
 - On Windows 11, turn off [Smart App Control](/guides/windows-security/#smart-app-control).
 
-## Install with the installer
+## Install with the launcher
 
-Download and run the [Sunrise Installer](https://github.com/stanuwu/SunriseInstaller/releases/latest).
+Download and run the [Sunrise Launcher](https://github.com/stanuwu/SunriseLauncher/releases/latest).
+
+The launcher downloads the game, installs Sunrise and the mission scripts, and starts the game. It
+also repairs and updates an existing install, including one made with the old installer.
 
 ## Install by hand
 
