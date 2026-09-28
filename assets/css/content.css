@@ -39,7 +39,20 @@
 
 /* --- Docs layout --- */
 .docs-layout { display:grid; grid-template-columns:260px 1fr; gap:56px; align-items:start; }
-.docs-sidebar { position:sticky; top:100px; }
+/* The sidebar scrolls on its own, with a thin thumb and no visible track. */
+.docs-sidebar {
+  position:sticky; top:100px; max-height:calc(100vh - 120px);
+  overflow-y:auto; overscroll-behavior:contain; padding-right:10px;
+}
+/* Chrome drops the ::-webkit-scrollbar styles when scrollbar-width is set, so only Firefox gets it. */
+@supports not selector(::-webkit-scrollbar) {
+  .docs-sidebar { scrollbar-width:thin; scrollbar-color:rgba(255,255,255,.18) transparent; }
+}
+.docs-sidebar::-webkit-scrollbar { width:4px; }
+.docs-sidebar::-webkit-scrollbar-button { display:none; height:0; }
+.docs-sidebar::-webkit-scrollbar-track { background:transparent; }
+.docs-sidebar::-webkit-scrollbar-thumb { background:rgba(255,255,255,.18); border-radius:2px; }
+.docs-sidebar:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.32); }
 .docs-category { margin-bottom:26px; }
 .docs-category-name {
   display:block; margin-bottom:8px;
@@ -133,7 +146,10 @@
   .page-heading { font-size:30px; }
   .article-heading { font-size:28px; }
   .docs-layout { grid-template-columns:1fr; gap:36px; }
-  .docs-sidebar { position:static; border-bottom:1px solid var(--line); padding-bottom:20px; }
+  .docs-sidebar {
+    position:static; max-height:none; overflow:visible; padding-right:0;
+    border-bottom:1px solid var(--line); padding-bottom:20px;
+  }
   .docs-pager { flex-direction:column; }
   .docs-pager-link { max-width:none; }
   .imprint { grid-template-columns:1fr; gap:2px; }

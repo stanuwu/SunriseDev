@@ -6,7 +6,7 @@
     <div class="hero-content">
       <p class="eyebrow"><span class="pulse"></span> OPEN SOURCE • WORK IN PROGRESS</p>
       <h1>Sunrise</h1>
-      <p class="hero-copy">A community-built preservation and restoration mod for Destiny 2. Load into destinations, play missions, and more with no servers.</p>
+      <p class="hero-copy">A community-built preservation and modding tool for Destiny 2. Load into destinations, play missions, and more with no servers.</p>
       <div class="hero-actions">
         <a class="button button-primary" href="{{ "guides/installing/" | relURL }}">Install Sunrise →</a>
         <a class="button button-ghost" href="{{ $gh }}" target="_blank" rel="noopener">View source ↗</a>
@@ -29,10 +29,10 @@
   <section class="section about" id="about">
     <div class="section-heading">
       <span class="section-kicker">01 / ABOUT</span>
-      <h2>Bringing content back from the grave.</h2>
+      <h2>Modding for Destiny 2.</h2>
     </div>
     <div class="about-copy">
-      <p>Sunrise installs onto an old build of Destiny 2 and lets you experience all its content once again, without requiring a server. It is designed to visit old destinations, replay old campaigns and experience the state of the game before sunsetting, not as a replacement for the live game.</p>
+      <p>Sunrise installs onto an old build of Destiny 2 and allows you to play it offline, without requiring a server. It is designed to enable exploration and modding in a safe way, not as a replacement for the live game.</p>
       <p>The project is open source and does not contain any game data. Some features are WIP or not present yet (most missions, p2p multiplayer, full progression, ...)</p>
       <div class="stat-row">
         <div><b>{{ $stats.stars }}</b><span>GitHub stars</span></div>
@@ -52,13 +52,13 @@
       <article class="team-member">
         <h3>stan</h3>
         <p class="team-role">Creator &amp; lead developer</p>
-        <p>Core development, mission script SDK and API.</p>
+        <p>Core development, Sunrise Studio, mission script SDK and API.</p>
         <a class="team-link" href="https://github.com/stanuwu" target="_blank" rel="noopener">
           {{ partial "icon.html" (dict "name" "brand-github" "size" 16) }} stanuwu ↗
         </a>
       </article>
       <article class="team-member">
-        <h3>techno</h3>
+        <h3>Techno</h3>
         <p class="team-role">Developer</p>
         <p>P2P multiplayer.</p>
         <a class="team-link" href="https://github.com/Techno453" target="_blank" rel="noopener">
@@ -71,6 +71,22 @@
         <p>Investment and progression.</p>
         <a class="team-link" href="https://github.com/gagefulwood" target="_blank" rel="noopener">
           {{ partial "icon.html" (dict "name" "brand-github" "size" 16) }} gagefulwood ↗
+        </a>
+      </article>
+      <article class="team-member">
+        <h3>throg</h3>
+        <p class="team-role">Developer</p>
+        <p>Investment, progression and SDK.</p>
+        <a class="team-link" href="https://github.com/throgsoft" target="_blank" rel="noopener">
+          {{ partial "icon.html" (dict "name" "brand-github" "size" 16) }} throgsoft ↗
+        </a>
+      </article>
+      <article class="team-member">
+        <h3>KyleThmpsn</h3>
+        <p class="team-role">Developer</p>
+        <p>Modding tools.</p>
+        <a class="team-link" href="https://github.com/KyleThmpsn" target="_blank" rel="noopener">
+          {{ partial "icon.html" (dict "name" "brand-github" "size" 16) }} KyleThmpsn ↗
         </a>
       </article>
       <article class="team-member">
@@ -88,7 +104,7 @@
     <div class="section-heading centered">
       <span class="section-kicker">03 / FEATURES</span>
       <h2>Built for offline.</h2>
-      <p>Sunrise focuses on giving as much of the full Destiny experience as possible offline. This means no hosting costs and no end of service.</p>
+      <p>Sunrise focuses on giving as much of the full Destiny experience as possible offline. This means no hosting costs, no end of service and full modding support.</p>
     </div>
 
     <div class="feature-tabs">
@@ -129,10 +145,25 @@
     </div>
   </section>
 
+  <section class="section about" id="studio">
+    <div class="section-heading">
+      <span class="section-kicker">04 / SUNRISE STUDIO</span>
+      <h2>Sunrise Studio</h2>
+    </div>
+    <div class="about-copy">
+      <p>Sunrise Studio is a mod creation tool for Sunrise. It allows to export, modify and create content for the game build that Sunrise uses. Projects are stored in a way that does not contain copyrighted game data. (WIP)</p>
+      <div class="stat-row">
+        <div><b>Browse</b><span>Maps, Objects, Entities and More</span></div>
+        <div><b>Edit</b><span>Import, Export and Edit Assets</span></div>
+        <div><b>Build</b><span>Awesome Mods and Content</span></div>
+      </div>
+    </div>
+  </section>
+
   <section class="section download" id="download">
     <div class="download-panel">
       <div>
-        <span class="section-kicker">04 / GET SUNRISE</span>
+        <span class="section-kicker">05 / GET SUNRISE</span>
         <h2>Ready to explore?</h2>
         <p>Follow the install guide to download the game and set up Sunrise.</p>
       </div>
@@ -153,7 +184,7 @@
   {{ with (where site.RegularPages "Section" "updates").ByDate.Reverse | first 3 }}
   <section class="section latest-updates" id="updates">
     <div class="section-heading">
-      <span class="section-kicker">05 / UPDATES</span>
+      <span class="section-kicker">06 / UPDATES</span>
       <h2>Latest from the project.</h2>
     </div>
     <div class="card-list">

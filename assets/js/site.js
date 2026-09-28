@@ -23,6 +23,14 @@ document.querySelectorAll(".site-header a").forEach(link => {
   });
 });
 
+// Open the docs sidebar scrolled to the current page, without moving the window.
+const sidebar = document.querySelector(".docs-sidebar");
+const activeDoc = sidebar?.querySelector(".docs-nav-item.active, .docs-category-name.active");
+if (sidebar && activeDoc && sidebar.scrollHeight > sidebar.clientHeight) {
+  const offset = activeDoc.getBoundingClientRect().top - sidebar.getBoundingClientRect().top;
+  sidebar.scrollTop += offset - sidebar.clientHeight / 3;
+}
+
 // Each .feature-tabs block is its own tab group.
 document.querySelectorAll(".feature-tabs").forEach(group => {
   const buttons = group.querySelectorAll(".tab-btn");

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 510" width="760" height="510" role="img" aria-labelledby="t">
+  <title id="t">Sunrise layers inside the game process</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#8d929b"/>
+    </marker>
+    <style>
+      text { font-family: Inter, "Segoe UI", Arial, sans-serif; }
+      .box { fill: #111317; stroke: rgba(255,255,255,.22); stroke-width: 1; }
+      .ext { fill: #0d0e11; stroke: rgba(255,255,255,.22); stroke-width: 1; stroke-dasharray: 5 4; }
+      .name { fill: #cb9b51; font-size: 16px; font-weight: 700; }
+      .game { fill: #f4f5f7; font-size: 16px; font-weight: 700; }
+      .sub { fill: #9298a1; font-size: 12px; }
+      .edge { stroke: #8d929b; stroke-width: 1.5; fill: none; }
+      .soft { stroke-dasharray: 5 4; }
+      .lbl { fill: #c3c7cd; font-size: 11.5px; }
+    </style>
+  </defs>
+  <rect width="760" height="510" fill="#0a0b0d"/>
+
+  <!-- the game -->
+  <rect class="ext" x="30" y="20" width="700" height="56"/>
+  <text class="game" x="380" y="44" text-anchor="middle">Destiny 2 client</text>
+  <text class="sub" x="380" y="63" text-anchor="middle">the game's own code, build 86657</text>
+
+  <!-- layers -->
+  <rect class="box" x="60" y="150" width="200" height="64"/>
+  <text class="name" x="160" y="176" text-anchor="middle">client</text>
+  <text class="sub" x="160" y="196" text-anchor="middle">hooks, targets, content workers</text>
+
+  <rect class="box" x="500" y="150" width="200" height="64"/>
+  <text class="name" x="600" y="176" text-anchor="middle">steam</text>
+  <text class="sub" x="600" y="196" text-anchor="middle">the local Steam API</text>
+
+  <rect class="box" x="260" y="260" width="200" height="64"/>
+  <text class="name" x="360" y="286" text-anchor="middle">server</text>
+  <text class="sub" x="360" y="306" text-anchor="middle">HTTP, BAP, Activity Host</text>
+
+  <rect class="ext" x="560" y="260" width="170" height="64"/>
+  <text class="game" x="645" y="286" text-anchor="middle">mission scripts</text>
+  <text class="sub" x="645" y="306" text-anchor="middle">Lua, run by the server</text>
+
+  <rect class="box" x="90" y="370" width="220" height="56"/>
+  <text class="name" x="200" y="393" text-anchor="middle">middleware</text>
+  <text class="sub" x="200" y="412" text-anchor="middle">wire and data formats</text>
+
+  <rect class="box" x="450" y="370" width="220" height="56"/>
+  <text class="name" x="560" y="393" text-anchor="middle">state</text>
+  <text class="sub" x="560" y="412" text-anchor="middle">account, activities, game data</text>
+
+  <rect class="box" x="30" y="450" width="700" height="44"/>
+  <text x="380" y="477" text-anchor="middle"><tspan class="name">core</tspan><tspan class="sub" dx="10">settings, logging, menu, startup order; used by every layer</tspan></text>
+
+  <!-- edges -->
+  <path class="edge" d="M160 78 L160 148" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="lbl" x="170" y="118">hooks</text>
+
+  <path class="edge" d="M600 78 L600 148" marker-end="url(#a)"/>
+  <text class="lbl" x="610" y="118">Steam API calls</text>
+
+  <path class="edge" d="M360 78 L360 258" marker-end="url(#a)"/>
+  <text class="lbl" x="370" y="118">BAP over</text>
+  <text class="lbl" x="370" y="133">loopback TCP</text>
+
+  <path class="edge" d="M160 216 L160 292 L258 292" marker-end="url(#a)"/>
+  <text class="lbl" x="170" y="284">requests</text>
+
+  <path class="edge soft" d="M600 216 L600 238 L430 238 L430 258" marker-end="url(#a)"/>
+  <text class="lbl" x="470" y="232">starts the server thread</text>
+
+  <path class="edge" d="M462 292 L558 292" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="lbl" x="510" y="284" text-anchor="middle">events,</text>
+  <text class="lbl" x="510" y="310" text-anchor="middle">requests</text>
+
+  <path class="edge" d="M320 326 L250 368" marker-end="url(#a)"/>
+  <text class="lbl" x="272" y="350" text-anchor="end">encode, decode</text>
+
+  <path class="edge" d="M400 326 L500 368" marker-end="url(#a)"/>
+  <text class="lbl" x="466" y="350">read, write</text>
+
+  <path class="edge" d="M312 398 L448 398" marker-start="url(#a)" marker-end="url(#a)"/>
+  <text class="lbl" x="380" y="390" text-anchor="middle">datagen</text>
+</svg>

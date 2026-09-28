@@ -75,9 +75,9 @@ draft: false
 ---
 ```
 
-Docs pages always go in a section folder: `mission-scripting/`, `sunrise/` or `destiny-2/`. To add a
-section, create a subfolder of `content/docs/` with an `_index.md` that sets `title`, `description`
-and `weight`.
+Docs pages always go in a section folder: `mission-scripting/`, `sunrise/`, `sunrise-studio/` or
+`destiny-2/`. To add a section, create a subfolder of `content/docs/` with an `_index.md` that sets
+`title`, `description` and `weight`.
 
 Put images in `static/images/` and link them as `![A screenshot](/images/screenshot.png)`. Embed a
 YouTube video with `{{</* youtube VIDEO_ID */>}}`.

@@ -204,7 +204,7 @@ button { font: inherit; }
 .team .section-heading { margin-bottom:55px; }
 /* The 1px gap lets the grid background draw the divider lines. */
 .team-grid {
-  display:grid; grid-template-columns:repeat(4,1fr);
+  display:grid; grid-template-columns:repeat(3,1fr);
   gap:1px; background:var(--line); border:1px solid var(--line);
 }
 .team-member { background:var(--bg); padding:34px 26px; }
