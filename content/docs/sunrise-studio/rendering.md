@@ -152,6 +152,11 @@ reproduced.
 
 Generation is cached by its lookup textures, the time-of-day keyframe and the light direction.
 
+A map opens at the time of day it authors as its start time. Altar of Flame starts at 0.4, EDZ at
+0.5 and Eternity at 0. A map with no start time, and every asset view, starts at 0.35. Once you set
+**Time of day** under **Environment**, Studio keeps your value for every map you open until it
+closes.
+
 ## Sun and shadows
 
 In Sky mode the time-of-day sun lights the scene with the game's `global_lighting` technique.

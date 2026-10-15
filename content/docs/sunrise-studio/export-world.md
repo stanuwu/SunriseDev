@@ -61,7 +61,7 @@ then picks the closest Blender light.
 | spot, or a light that shines mostly one way | spot light, plus a point light for the light it sends outside the cone |
 | a light that is dark behind | the above, plus a spot light of negative power facing back |
 | line (a tube) | a row of point lights along it, at most 16; spot lights when it shines mostly to one side |
-| sun | sun light, from the map's time-of-day curves at time 0.35, as the atmosphere preview shows it |
+| sun | sun light, from the map's time-of-day curves at the map's start time |
 
 The lights cast no shadows, like the game's placed lights. The sun casts shadows. Each light uses
 **Soft Falloff**, a **Radius** and a **Custom Distance**; together they follow the game light's fade
@@ -76,7 +76,7 @@ Most of a map's light comes from its sky, not the sun. The import sets up three 
 
 | part | Blender |
 |---|---|
-| sky | a new world, the scene's world: the camera sees the map's sky at time 0.35, and surfaces get the game's sky light |
+| sky | a new world, the scene's world: the camera sees the map's sky at its start time, and surfaces get the game's sky light |
 | light volumes | one baked EEVEE **Volume** light probe per game cubemap box, so covered and indoor places get less sky |
 | view | **Color Management**: **AgX**, look **AgX - High Contrast**, **Exposure** 0 |
 
@@ -128,8 +128,10 @@ The record is small. Altar of Flame bakes 28 emitters into about 250 KB.
   them; Blender cannot, so that light is added to the surfaces that face the light. A surface at
   60 degrees to the light gets the game's light, one facing it gets more, one facing away gets none.
 - The game fades out a light seen from far away. Blender lights do not fade with the camera.
-- The sky is at one time of day. The map's fog and the colours of its local cubemaps are not
-  exported; reflections show the blurred sky light instead of the sharp sky.
+- The sky and the sun are at one time of day: the start time the map authors, or 0.35 when it has
+  none. The **Time of day** you set in the view does not change the export. The map's fog and the
+  colours of its local cubemaps are not exported; reflections show the blurred sky light instead of
+  the sharp sky.
 - The sun shades and casts shadows along one direction. The game casts its sun shadows along a
   second direction, up to about 10 degrees away.
 - Faces the game culls are hidden in EEVEE and the viewport. Cycles draws both sides.

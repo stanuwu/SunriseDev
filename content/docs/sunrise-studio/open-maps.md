@@ -116,7 +116,7 @@ hidden object shows its layer and bubble again.
 
 | control | effect |
 |---|---|
-| **Time of day** | sets the time of day of the sky, from 0 to 1 |
+| **Time of day** | sets the time of day of the sky, from 0 to 1; a map opens at its own start time until you move it |
 | **Backdrop** | **Follow cursor**, **Fixed bubble** or **All bubbles** |
 | **Sky bubble** | the bubble whose sky to use with **Fixed bubble** |
 | **Auto exposure** | adjusts brightness on its own |
