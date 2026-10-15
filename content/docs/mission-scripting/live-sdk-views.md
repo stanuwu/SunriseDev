@@ -1,11 +1,11 @@
 ---
 title: "The live SDK views"
-date: 2026-09-17
+date: 2026-10-15
 description: "Reading the catalog, manifest and generated world from a running script."
 weight: 60
 ---
-`context.sdk` is the activity view. It is a read-only window into the same data the generated
-modules come from, bound to the activity that is running now. Use it to look things up at run time.
+`context.sdk` is the activity view. It is a read-only window into the same data as the generated
+modules. It is bound to the running activity. Use it to look things up at run time.
 Most missions only need `device_channels`, `device_transitions`, `squad_modes` and `atom_kinds`
 from it.
 
@@ -32,6 +32,10 @@ There is no `pairs` in the sandbox, so always walk with a number loop like this.
 
 ## `context.sdk` members
 
+`sunrise/mission_api.json` lists only the Identity and Vocabularies members below, and only
+`matches` on a message row. This page is the reference for the rest. See
+[The generated SDK modules](/docs/mission-scripting/generated-sdk/).
+
 ### Identity
 
 | member | type | meaning |
@@ -44,7 +48,7 @@ There is no `pairs` in the sandbox, so always walk with a number loop like this.
 
 ### Activity binding
 
-These describe how the activity was matched to its scenario. They are for tools, not missions.
+These describe how the activity is matched to its scenario. They are for tools, not missions.
 
 | member | type |
 |---|---|
@@ -65,23 +69,52 @@ These describe how the activity was matched to its scenario. They are for tools,
 | `slots` | slot handles | `at(row)`, `resolve(id)` |
 | `activity_messages` | message rows | `at(row)`, `by_id(message_id)`, `resolve(name)` |
 | `bap_services` | service rows | `at(row)`, `by_request_id(n)`, `by_response_id(n)`, `by_notification_id(n)` |
-| `squad_anchors` | world rows of kind squad anchor | `at(row)` |
+| `squad_anchors` | squad anchor rows of this scenario | `at(row)` |
 
 The squad, scene and slot handles are the same objects `context:squad`, `context:scene` and
 `context:slot` return. See [Lua API reference](/docs/mission-scripting/lua-api/).
+
+A squad anchor row is one authored spawn point. `squad.anchors` holds the same rows for one squad.
+A row has `id`, `world_id`, `row`, `collection_row`, `squad_row`, `point_ordinal`,
+`object_list_tag`, `placement_ordinal`, `flags`, `placed_entry_identity` and `position`.
+`placed_entry_identity` is a decimal string and `position` is a vector.
 
 ### Vocabularies
 
 | member | what it holds |
 |---|---|
 | `device_channels` | `position`, `power`, `lock`; `count` |
-| `device_transitions` | `open`, `close`, `power_on`, `power_off`, `lock`, `unlock`; `count`, `at(n)` |
+| `device_transitions` | `open`, `close`, `power_on`, `power_off`, `lock`, `unlock`; `count`, `at(1..6)` |
 | `squad_modes` | `reinforce`, `replace`, `reserve`; `count` |
 | `lifetime_states` | `at(0..10)`, `default`, `count` |
 | `atom_kinds` | a plain table of atom kind names |
-| `bounded_lanes` | fixed-size client lists; see below |
+| `bounded_lanes` | fixed-size client lists; `count`; see below |
 | `unit` | `function(number)`; makes a device channel value |
 | `position` | `function(x, y, z)`; makes a world position |
+
+Each entry and each made value is a handle with these fields:
+
+| value | fields | taken by |
+|---|---|---|
+| a device channel | `name`, `value` (the type-23 wire lane) | `set_channel`, `applied` |
+| a device transition | `name`, `channel`, `value` (a unit value) | `transition` |
+| a squad mode | `name`, `value` (the squad placement mode) | `place` |
+| a lifetime state | `at(n)`; `default` is 3 | `context.lifetime:set` |
+| `unit(x)` | `value`, `low` (0), `high` (1); the range is not checked | `set_channel` |
+| `position(x, y, z)` | `x`, `y`, `z`; each must be finite | no request |
+
+Each transition moves one channel to one end:
+
+| transition | channel | value |
+|---|---|---|
+| `open` | position | 1 |
+| `close` | position | 0 |
+| `power_on` | power | 1 |
+| `power_off` | power | 0 |
+| `lock` | lock | 1 |
+| `unlock` | lock | 0 |
+
+`complete_mission` sets lifetime state 6.
 
 ### Deep views
 
@@ -120,8 +153,15 @@ A field row has `row`, `global_row`, `message_row`, `ordinal`, `path`, `name`, `
 ## BAP service rows
 
 `context.sdk.bap_services` lists the outer network services. It is data only. A script can never
-send one. The collection itself has `schema`, and the fixed flags `query_only = true` and
-`script_sendable = false`.
+send one. The collection itself has `count` (also `row_count`), `schema`, and these fixed values:
+
+| member | value |
+|---|---|
+| `query_only` | `true` |
+| `script_sendable` | `false` |
+| `runtime_authority` | `"protocol"` |
+| `raw_bodies` | `"not_exposed"` |
+| `activity_message_namespace` | `"separate_inner_activity_message_id"` |
 
 A row has `row`, `id`, `service_id`, `request_service_id`, `response_service_id`,
 `notification_service_id`, `service_role`, `security`, `response_mode`, `acceptance_policy`,
@@ -130,7 +170,11 @@ A row has `row`, `id`, `service_id`, `request_service_id`, `response_service_id`
 `body_codec_path`, `response_body_codec`, `response_body_codec_path`, `route`, `route_path`,
 `activity_message_envelope`, `inner_message_namespace`, `lifecycle_scope`, `protocol_scope` and
 the size fields `complete_encrypted_frame_overhead_bytes` and
-`complete_encrypted_frame_max_bytes`.
+`complete_encrypted_frame_max_bytes`. A size or id that does not apply reads nil.
+
+Every row also has fixed values: `service_id_namespace = "bap_service_id"`,
+`runtime_authority = "protocol"`, `data_only`, `executable` and `query_only` are `true`, and
+`script_sendable` and `raw_body_exposed` are `false`.
 
 ## Bounded lanes
 
@@ -143,8 +187,8 @@ Some client lists have a fixed size. A bounded list cannot grow past it.
 | `nav_node_links` | count | 16 |
 | `type8_field_1_0` | count | 32 |
 | `type8_field_2_0` | count | 16 |
-| `type8_object_refs` | object reference | 16 |
-| `type53_object_refs` | object reference | 129 |
+| `type8_object_refs` | object_ref | 16 |
+| `type53_object_refs` | object_ref | 129 |
 
 ```lua
 local lane = context.sdk.bounded_lanes.nav_nodes   -- name, capacity, kind
@@ -153,8 +197,11 @@ list:append(7)          -- a count list takes int32 values
 local first = list:at(1)
 ```
 
+A list has `count`, `capacity`, `lane`, `at(row)` and `append(value)`. `append` errors when the
+list is full.
+
 An object reference list takes slot handles in `append` and returns slot handles from `at`. No
-current effect takes these lists yet. They are ready for typed bodies that need them.
+request takes these lists.
 
 ## The catalog view
 
@@ -244,7 +291,8 @@ that points at another row is nil when there is no row. A vector field is a hand
 | `embedded_placements` | `position`, `rotation`, `link_row`, `entry_index`, `class_list_tag`, `name_hash`, `identifier`, `object_type`, `class_list_name` |
 | `container_placements` | `position`, `rotation`, `uniform_scale`, `list_row`, `object_list_tag`, `resource_tag`, `resource_class`, `entry_index`, `object_type`, `object_list_name`, `resource_name`, `class_list_name`, `complete` |
 | `static_spatial_instances` | `position`, `rotation`, `scale`, `local_minimum`, `local_maximum`, `table_row`, `instance_index`, `table_tag`, `bounds_tag`, `resource_tag`, `table_name`, `bounds_name`, `resource_name` |
-| `squad_anchors` | `position`, `squad_row`, `point_ordinal`, `object_list_tag`, `placement_ordinal`, `placed_entry_identity` |
+
+Squad anchors are not under `world`. Read them from `context.sdk.squad_anchors` or `squad.anchors`.
 
 A trigger volume's `vertices` and `triangles` are collections. A vertex has `value`, a triangle has
 `a`, `b` and `c`.

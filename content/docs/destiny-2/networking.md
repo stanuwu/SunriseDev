@@ -1,7 +1,7 @@
 ---
 title: "Network stack"
-date: 2026-09-28
-description: "The client's network protocols, the bdLobby service registry and the peer transport."
+date: 2026-10-15
+description: "The client's network protocols: SignOn, the bdLobby services, the web-service RPC, replicated objects, matchmaking and the peer transport."
 weight: 60
 ---
 The client speaks seven network protocols. All live services are Demonware, over IPv4 only. There
@@ -35,8 +35,25 @@ The engine's socket layer has a `kind` on every socket. It decides the path a da
 
 ## SignOn
 
-SignOn is one HTTPS POST. The request body is protobuf and carries a Steam session ticket. The build
-number and platform are in the query string.
+SignOn is one HTTPS POST. The build number and platform are in the query string. The request body
+is protobuf with 21 root fields. It reports client state and asks for nothing.
+
+| request field | content |
+|---:|---|
+| 1 | protocol version, 16 on this build |
+| 2 | the platform credential; on PC, a sub-message with the 90-byte Steam encrypted app ticket |
+| 3, 19 | UI and audio language, for example `en` |
+| 5, 6 | the content version and the build string |
+| 12 | the cookie from a previous queued response, echoed byte for byte |
+| 15 | owned entitlements, up to 64 |
+| 17 | the SKU type, for example `north_america_digital` |
+| 20 | a report of the previous failed attempt, present only after one |
+| 22 | the Steam account: id, name, a signed proof and the country |
+| 23 | the client's half of the peer key exchange; the same message type as success field 12 |
+| 24 | how many throttled responses came in a row |
+
+Fields 9, 10, 14 and 16 do not exist. The client holds nothing that can check the Steam ticket or
+the account proof. Only the real backend could validate them.
 
 The response is protobuf, decoded by the same nanopb runtime bdLobby uses. Field 1 selects the
 outcome.
@@ -49,10 +66,65 @@ outcome.
 | 3 | denied, user action required |
 | 4 | throttled, retry later |
 
-A success body carries an opaque session token, the BAP server's IPv4 address and port, material for
-the secure channel, and up to eight feature names. The feature list is the only source of feature
-flags, so every named feature is off unless SignOn names it. Details of the token and channel setup
+A success body carries an opaque session token, the BAP server's IPv4 address and port, and
+material for the secure channel. The response also carries up to eight feature names. That list is
+the only source of feature flags, so every named feature is off unless SignOn names it. Details of the token and channel setup
 are on [From launch to orbit](/docs/sunrise/boot-and-sign-in/).
+
+### The success fields
+
+Fields 1 to 7 of the success message are required. A missing one fails the whole parse.
+
+| field | content | client use |
+|---:|---|---|
+| 1 | up to 16 bytes | never read; the official server sends it empty |
+| 2, 3 | 16 bytes each | the AES-128 key and the HMAC-SHA256 key for the BAP secure hello |
+| 4 | the session token, up to 568 bytes | the image calls it `cs_signon_token` |
+| 5 | an absolute expiry, epoch seconds | stored in a slot nothing reads |
+| 6, 7 | IPv4 and port of the BAP server | the next hop |
+| 9 | three fixed32 values | read as floats; copied and logged only |
+| 11 | a relative expiry, seconds | overrides field 5 into the same unread slot |
+| 12 | the peer key-exchange block | relayed into the peer handshake |
+| 13 | a bool | blocks five UI launch handlers; the official server omits it |
+| 14 to 16 | three strings | city, country and ISP; copied into a report only |
+
+Field 12's `f4` must be exactly 128 bytes. Any other length is silently discarded. The client does
+not verify its contents.
+
+The top-level response also carries a silo id (printed as `Silo ID: N`), the client's external IPv4
+(which it saves as its address), a client-config sub-message and six capability bits. The
+capability bits only feed an account-status report and gates on the next request. They do not decide
+whether the lobby connects.
+
+### The other outcomes
+
+Each non-success arm needs its own sub-message, except access-denied.
+
+- **Queued.** Position, time remaining and retry delay are required. A zero in any of them keeps the
+  previous value. A server-offline flag picks the message the player sees. A cookie is echoed back
+  on the next request.
+- **Throttled.** A message and an optional retry delay. With no delay the client waits exactly 60
+  seconds. An explicit zero means zero.
+- **Error.** The reason picks a terminal state. The names are the client's own.
+
+| reason | state | reason | state |
+|---:|---|---:|---|
+| 1 | `_suspended` | 10 | `_internal_server_error` |
+| 4 | `_prelaunch` | 11 | `_sms_validation_required` |
+| 5 | `_platform_error` | 12 | `_free_license_limit_exceeded` |
+| 6 | `_configuration_error` | 13 | `_korea_cinderella_law` |
+| 7 | `_commercialization_error` | 14 | `_excessive_mtx_debt` |
+| 8 | `_version_mismatch_error` | other | `_denied` |
+
+The denial screen shows the error's title and body only when both are present.
+
+### The content manifest
+
+After SignOn the client fetches a content manifest over HTTP. The body is a 264-byte signature
+followed by protobuf. The signature prefix is `[u32 big-endian 1][u32 0]` and a 256-byte RSA-2048
+signature: PSS padding, SHA-256, a 16-byte salt, over the body. The client holds one public key, and
+the same key signs `sku_config.txt`. On failure it records a code: 1 decode failed, 2 HTTP failed,
+5 body shorter than 264 bytes, 6 no key verified the signature, 8 HTTP 404.
 
 ## bdLobby BAP
 
@@ -112,7 +184,7 @@ above are dropped at the header, so no newer service can reach this build.
 | 16, 17 | `c->b_ahp req`, `rsp` | both | 8 bytes in (host id), 16 bytes back (id, IPv4, reserved, port) |
 | 19 | `client_config_response` | S->C | protobuf |
 | 21, 22 | purchased offers | both | request is send-only; the response is protobuf |
-| 23, 24 | account id translation | both | 12 bytes in; a bit-packed list back |
+| 23, 24 | account id translation | both | 12 bytes in; a bit-packed list back; an empty reply kills the link |
 | 25, 26 | secure hello | both | SignOn token in; 84-byte channel setup back |
 | 28 | `server_challenge_request` | S->C | protobuf inside an authenticated envelope; meaning unknown |
 | 30, 31 | channel start | both | 128 bytes back, not inspected |
@@ -150,6 +222,151 @@ A server-initiated message is a push. The client accepts pushes on exactly 15 id
 - Ids 6 and 161 have no handler behind them. A push that decodes on either id crashes the client.
 - An id outside the 15 is a null call, not an ignored message.
 - That leaves 13 usable ids. Twelve of them do real work.
+
+## Web-service RPC, services 10 and 11
+
+Inventory, character and most other account actions ride services 10 (request) and 11 (response).
+The server-role pair 110 and 112 uses the same codec. The body is not protobuf. It is a Bungie
+bitstream holding an opcode-dispatched RPC. Bungie's own name for this layer is
+`networking:investment:server_message_interface`.
+
+```c
+/* ws message, bit-packed, MSB first */
+u16  wire_opcode;      /* looked up in a descriptor table; an unknown opcode aborts */
+u32  transaction_id;
+...  body;             /* the request or response definition the opcode names, walked bit by bit */
+bit  blob1_present;    /* then u16 length and bytes */
+bit  blob2_present;    /* then u16 length and bytes */
+```
+
+The client knows 115 opcodes. Each descriptor holds a wire opcode, a request definition and a
+response definition. The wire opcode is an arbitrary `u16`. The table index is local and never goes
+on the wire. 36 opcodes have a known client sender. The 44 opcodes 1201 to 1245 have no sender at
+all: the client only receives them.
+
+| opcode | what the client sends |
+|---:|---|
+| 206 | subscribe to a replicated object family |
+| 402 | a generic item action: item instance id, definition index, a row value and an action byte |
+| 403 | equip: the item instance id, nothing else |
+| 501, 502 | create and delete a character |
+| 503 | the Investment sign-in request |
+| 505 | change character |
+| 601 | loot pickup: a pickup kind and a loot identity |
+| 801, 802, 804 | socket actions: item, socket index, and for 804 a source item |
+| 901 | buy a vendor sale row |
+| 904 | a three-index investment table action |
+| 1801 | claim a triumph reward: a record index |
+| 1820 | pull an item from Collections: a collectible row index |
+| 1901 | a batch of up to 12 plug insertions into one item: plug definition index and socket per entry |
+
+No item action carries a plug hash or a shader hash. The socket actions 801, 802 and 804 name only an
+item instance and a socket index, and the server works out the rest. 1901 names each plug by its
+definition index. The labels in this table come from the client's own senders. They are not the
+backend's names for the operations.
+
+### The reply's version barrier
+
+75 of the 115 response definitions inherit the same 37-bit pair: a 5-bit status, bias 1, then a
+32-bit value with bias `INT32_MIN`.
+
+- Logical status 0 or 7 completes the operation. Status 16 is a content-table patch checksum soft
+  rejection. Anything else is an error.
+- The value is a revision of the account's family-4 objects. When it is not -1, the client parks
+  the operation until its own copy of those objects reaches that revision.
+- Logical -1 means "nothing to wait for". A zero on the wire decodes to `INT32_MIN`, which is a
+  revision request, not -1.
+
+So a reply to a change must name the revision of the object update that publishes the change, and
+that update must follow. A reply to anything else sends -1, including an error reply.
+
+Replies 1103, 2200 and 2300 write the same 37 bits inline instead of inheriting the pair. Their second
+field is not a revision, and the client does not wait on it.
+
+## Replicated objects, service 123
+
+Service 123 (`qz->c update not`) delivers Investment state. The game calls it `queuez`. It is a
+subscription-based replicated object store. There is no bulk read anywhere. The plain-text error
+`Buffer is too small. WorldServer may have incompatible build.` names the producer: the WorldServer.
+
+The body is big-endian:
+
+```c
+u32 family_update_count;          /* 0 is an error */
+/* per family, 21 bytes, no padding */
+u32 family_type;                  /* 0 to 7 */
+u64 family_root_id;
+i32 version;                      /* -1 is an error */
+u8  flags;                        /* bit 0: full snapshot */
+u32 object_count;                 /* 0 is legal */
+/* per object, 20 bytes, then the payload */
+u32 object_id;                    /* a definition id, not a slot index */
+u64 object_key;                   /* must equal the payload's first qword */
+u32 payload_len;                  /* bytes; 0 deletes the object */
+u32 encoding;
+```
+
+The store has 8 families of 6 object slots. `object_id` is matched against a value inside the
+definition each slot is bound to, so it is fixed per slot. For example, the family-4 account object
+uses `0x32D7B974` and the character object `0xE5E86992`.
+
+| encoding | payload |
+|---:|---|
+| 1 | the slot's schema, bit-packed; applied in place as a delta, so absent fields stay |
+| 2 | a binary diff against the previous object bytes |
+| 3 | raw bytes, copied with no clamp to the slot size |
+| 4 | Oodle; must expand to exactly the slot's object size |
+
+A version must be the previous version plus one. A full snapshot deletes every object it does not
+name. A payload over 96,280 bytes is fatal. The account object is exactly 96,280 bytes, so it goes
+out compressed or as a delta.
+
+A whole service-123 message also has a size limit. Its exact value is unverified: a 46,973-byte
+message works, and a 143,285-byte message ends the BAP link.
+
+The client keeps the first error it sees:
+
+| code | cause |
+|---:|---|
+| 1 | a ws send failed |
+| 2 | no record for that family; the client never subscribed |
+| 3 | `object_id` matches no slot |
+| 4 | no room in the client's own slot table |
+| 5 | the payload's first qword is not the object key |
+| 6 | a version gap |
+
+Codes 2 to 6 surface as bootflow reasons 176 to 180, code + 174. Code 1 surfaces as nothing.
+
+## Matchmaking, services 42 and 43
+
+Every matchmaking request is service 42 with the same 2,624-byte body. Field 2 is the request kind,
+and the reply on service 43 must match it.
+
+| field 2 | request |
+|---:|---|
+| 1 | session search |
+| 2 | update the session advertisement |
+| 3 | delete the session advertisement |
+| 4 | matchmaking configuration |
+| 5, 6 | update or delete the rejoin advertisement |
+| 7 | locate a session |
+| 8 | live matchmaking stats |
+
+The reply carries no correlation field. The BAP task id does that.
+
+- **Configuration, kind 4.** Accepted on field 4's presence alone. A useful reply also sets a fair
+  queue base value, in seconds. The client adds the seconds since it arrived and reports the result
+  in every later advertisement, with the time of its first search reply and its first non-empty
+  one. Reading this as a wait-time queue is assumed.
+- **Search, kind 1.** Field 3 holds up to 50 results and a maximum acceptable ping. The client keeps
+  each result's 128-byte join descriptor and two scores. A result with no ping estimate is kept. A
+  session the client failed to join is refused for a while, so a server should not reuse its id.
+- **Advertisement, kind 2.** A success reply sets field 1 to 2 and assigns a non-zero
+  advertisement id.
+
+The search request's wire matchmaking type is 1 only for the internal type `PUBLIC activity target`.
+The internal names are `PRIVATE activity`, `PUBLIC activity` and `PUBLIC activity target`.
+Matchmaking is enabled by a local config byte that no server message writes.
 
 ## Protobuf in the client
 
@@ -227,6 +444,27 @@ struct NetAddr {                /* 86 bytes; ports low byte first */
     uint8_t  transport_method;  /* +0x55  0 to 5 bdNet, 6 and 7 Steam relay */
 };
 ```
+
+On the bdNet path the transport reads only the first 41 bytes, as a serialized `bdCommonAddr`. An
+address with no public endpoint is sent to NAT traversal instead of being dialed.
+
+### The join descriptor
+
+A session is joined through a 128-byte join descriptor. It is exactly full: four fields, no padding.
+
+| offset | size | field |
+|---:|---:|---|
+| `+0` | 8 | machine id |
+| `+8` | 86 | host NetAddr; its last byte, `+93`, is the transport method |
+| `+94` | 16 | join key |
+| `+110` | 18 | online session id; its low 8 bytes are the Steam lobby id |
+
+The game's debug overlay prints two of these itself, as `ID:` (the machine id) and `KEY:` (the join
+key). On the wire the descriptor is length-prefixed, and the length must read 128.
+
+On the Steam arm, the client joins the lobby named at `+110`. Any delivered lobby callback commits
+the session, whatever its result field says. Only a `JoinLobby` call that returns no handle blocks
+the join.
 
 ### The association handshake
 
@@ -353,6 +591,7 @@ The channel has 45 ids, 0 to 44.
 |---:|---|---|
 | 0, 1 | `ping`, `pong` | a 16-bit sequence and a 64-bit timestamp, echoed |
 | 2, 3 | `broadcast-search`, `broadcast-reply` | LAN discovery; id 3 has no dispatcher in this build |
+| 4 | `packets-discarded` | how many packets the receive window dropped, at most 31 |
 | 5 | `connect-request` | channel id, initial sequence, requester address |
 | 6 | `connect-response` | echoes the request, adds the responder's channel id, sequence and address |
 | 7 | `connect-refuse` | echoes the request, a 3-bit reason |
@@ -361,6 +600,7 @@ The channel has 45 ids, 0 to 44.
 | 10 | `join-request` | protocol version, build bounds, group session id, join id, joining peers and members |
 | 11 | `peer-connect` | protocol version, machine id, group session id |
 | 12 | `join-complete` | group session id, join id, membership revision |
+| 13 | `join-abort` | group session id and the joining peer's machine id; cancels a join |
 | 14 | `join-refuse` | group session id, join id, one of 30 named reasons |
 | 15, 16 | `leave-session`, `leave-acknowledge` | the group session id |
 | 17, 18 | `session-disband`, `session-boot` | session id, machine id, reason |
@@ -380,6 +620,27 @@ The channel has 45 ids, 0 to 44.
 
 Clock sync (id 29) computes `offset = ((t2 - t1) + (t3 - t4)) / 2`. The receive time t4 is never on
 the wire. A reply is terminal: answering one loops forever.
+
+### What a host checks in a join request
+
+The host side of `join-request` runs these checks in order:
+
+| check | on failure |
+|---|---|
+| the protocol version matches | no reply at all |
+| the named group session exists and is in state 6 to 9 | `join-refuse` reason 4 `not-found` |
+| the joiner's high build bound is at least 86657 | reason 27 `peer-version-too-low` |
+| the joiner's low build bound is at most 86657 | reason 28 `host-version-too-low` |
+| the executable type is 5 | reason 29 `executable-type-mismatch` |
+
+Admission can still refuse with 4, 6 `not-joinable`, 7 `session-full` or 26 `rejected-by-host`.
+The 30 refusal reasons are named in the client, from 0 `no-reason-given` to 29
+`executable-type-mismatch`. Others include 5 `privacy-mode`, 8 `no-ambassador-reservation`,
+17 `wrong-silo-id`, 18 `wrong-payload-type` and 22 `player-not-online-enabled`.
+
+Nothing authenticates the host. The one RSA verify on the receive path discards its result, and a
+peer that leaves its identity blob out skips it entirely. Both key-exchange keys are made by the
+peers themselves.
 
 Sunrise's peer codecs are in `src/middleware/gameplay/peer/` and
 `src/middleware/gameplay/group/`.
@@ -412,7 +673,7 @@ the receiver holds.
 |---:|---|---|
 | 1 | u32 | membership revision; 0 means none published yet |
 | 2 | u32 | host member index |
-| 3 | u32 | host-succession candidate index (not verified) |
+| 3 | u32 | host-succession candidate index (unverified) |
 | 4 | u32 | member count |
 | 5 | u64 | member-slot bitmask; low 32 bits used |
 | 6 | repeated | the member table, up to 32 entries |
@@ -519,7 +780,7 @@ block, and both use one decoder. Its header comes first.
 | bits | field | rule |
 |---:|---|---|
 | 64 | session id | from the running session |
-| 16 | protocol version | must equal the client's |
+| 16 | protocol version | must equal the client's, `0xA4F8` on this build |
 | 3 | kind | must be 5 |
 | 31 | build high bound, bias -1 | must be at least 86657 |
 | 31 | build low bound, bias -1 | must be at most 86657 |

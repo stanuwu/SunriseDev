@@ -1,6 +1,6 @@
 ---
 title: "From launch to orbit"
-date: 2026-09-28
+date: 2026-10-15
 description: "How the game reaches Sunrise, signs on, opens its BAP link and walks the boot steps to orbit."
 weight: 30
 ---
@@ -51,7 +51,7 @@ The BAP link is a real TCP connection. Sunrise runs a listener on the loopback a
   clears the slot.
 
 The game's own BAP code does all the client work. Sunrise does not patch the connect. The address
-comes from the SignOn reply, as it did on the live service.
+comes from the SignOn reply, the same as on the live service.
 
 ## SignOn
 
@@ -59,8 +59,8 @@ SignOn is one HTTPS POST with a protobuf body. The game reports its state and as
 
 ### The request
 
-Sunrise does not read the request body. It checks only the URL. For reference, the request carries
-these fields, among others:
+Sunrise does not read the request body. It checks only the URL. The request carries these fields,
+among others:
 
 | field | holds |
 |---:|---|
@@ -200,7 +200,8 @@ The channel is encrypted after services 25 and 26.
 
 ### Services on the encrypted link
 
-The service table is `src/server/bap/encrypted/routing/bap_service_routing.cpp`. The main services:
+The service table is `src/server/bap/encrypted/routing/bap_service_routing.cpp`. It routes these
+services:
 
 | request -> reply | what it is | Sunrise answers |
 |---|---|---|
@@ -212,8 +213,15 @@ The service table is `src/server/bap/encrypted/routing/bap_service_routing.cpp`.
 | 16 -> 17 | ask where an Activity Host lives | the same loopback address and port |
 | 8 | message to the Activity Host | no reply; answers go out as pushes on 9 |
 | 23 -> 24 | translate an id to a SOID | the account SOID, or a session id on an Activity Host link |
+| 18 -> 19 | client configuration | the configuration fields |
+| 32 -> 33 | user messages | the user-message fields |
+| 42 -> 43 | matchmaking, 8 request kinds | the answer for that kind; the activity configuration sets the big-fireteam threshold to 2 |
+| 44 -> 45 | clan | empty clan data |
+| 304 -> 305 | sign a Steam certificate | the client's own certificate, wrapped |
+| 21 -> 22, 34 -> 35, 36 -> 37, 38 -> 39, 40 -> 41, 48 -> 49, 50 -> 51, 306 -> 307 | other requests the client waits on | empty reply |
 | 121 -> 122, 302 -> 303 | link setup | empty reply |
 | 250 -> 251 | keepalive | empty reply |
+| 29, 171 | client notifications | no reply; they have no response service |
 
 Server pushes have no request:
 
@@ -275,7 +283,7 @@ Log locations and levels are in [Settings, logs and in-game tools](/docs/sunrise
 
 ## Open questions
 
-- Which boot step sends SignOn is not verified.
+- Which boot step sends SignOn is unverified.
 
 ## Related pages
 

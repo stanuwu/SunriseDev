@@ -1,6 +1,6 @@
 ---
 title: "The build"
-date: 2026-09-28
+date: 2026-10-15
 description: "The Destiny 2 build Sunrise targets, its reference build, and how it differs from newer builds and Destiny 1."
 weight: 5
 ---
@@ -26,12 +26,13 @@ cross-checks only.
 | platform | PC, 64-bit Windows, Direct3D 11 |
 | copyright string | (C) 2020 Bungie |
 
-The date comes from the build string. The executable's link time is the same day. The package
+The executable's link time is the same day as the build date. The package
 headers carry eight different content build numbers. The highest one, 86657, is the build itself.
 
 ### The depot manifest
 
-Sunrise uses these Steam depot manifests. The installer and the
+Sunrise uses these Steam depot manifests. The
+[Sunrise Launcher](https://github.com/stanuwu/SunriseLauncher) and the
 [install guide](/guides/installing/) download exactly these.
 
 | depot | holds | manifest | manifest date |
@@ -39,22 +40,46 @@ Sunrise uses these Steam depot manifests. The installer and the
 | 1085661 | the shared Windows files | `7180122903232116872` | 2020-09-08 |
 | 1085662 | the English language files | `2210332166360342287` | 2020-08-20 |
 
-Each other language has its own depot and manifest. The installer lists them.
+An install needs the shared depot and one language depot. The other languages are depots 1085663
+to 1085674, one each. The launcher pins a manifest for each and installs the language you pick.
 
 This is one of the last manifests before Beyond Light, not the last one. Later updates shipped on
-2020-09-22 and in November 2020. The manifest dates come from a public record of Steam manifests.
+2020-09-22 and in November 2020.
 
 ### What the build does not have
 
 | absent | note |
 |---|---|
-| BattlEye | anticheat was not yet part of this build |
-| PlayFab | adopted years later; this client never uses it |
-| crossplay identity services | added later |
+| BattlEye | this build has no anticheat |
+| PlayFab | this client does not use it |
+| crossplay identity services | not in this build |
 | Bungie class RTTI | the only RTTI in the image belongs to Havok, CRI and the C runtime |
 | plain-text log strings | every log format string is obfuscated |
-| launch switches | the client reads no command line, and no environment variable controls it |
+| launch switches | no command-line switch is read, and no environment variable controls the client |
 | a bungie.net REST API | all live services are Demonware; see [Network stack](/docs/destiny-2/networking/) |
+
+### The executable is packed
+
+The installed `destiny2.exe` is protected with VMProtect. Its main code section and its read-only
+data are encrypted on disk, so no string, table or constant can be read from the installed file.
+The image decrypts itself in TLS callbacks before the entry point runs. Once the game reaches the
+title screen, the main code section is fully decrypted in memory. A second code section holds the
+VMProtect virtual machine and stays partly encrypted, decrypted block by block.
+
+Most functions are only mutated: scrambled into small islands joined by jumps, which confuses
+function bounds and cross-references but not the code itself. A few are virtualized. Many singleton
+pointers are stored encrypted and decoded inline by their getters. Some functions begin with an
+integrity check that runs and then returns into the plain body.
+
+### Engine globals
+
+The engine allocates its long-lived state in named blocks through one function. Build 86657 has 315
+such call sites. The names are obfuscated with a per-string rolling XOR, and 309 of them decode.
+They include the world controller's managers (`world controller state manager`,
+`world controller slice set manager`, `world controller matchmaking manager` and others) and the
+network blocks (`network simulation globals`, `bap connection manager globals`). Fourteen names are
+not in the 2017 beta. Among them are `Steam QoS globals`, `gambit slicer globals` and
+`player melee finisher registry handle`. All of them fit a 2020 Steam build.
 
 ## The naming donor: PS4 build 87221
 
@@ -102,40 +127,37 @@ What does not transfer:
 
 ### Where mission scripts run
 
-Bungie said in September 2020 that Beyond Light moved mission scripting from the Mission Host to the
-Physics Host. Build 86657 comes before that change. A design based on a later build can put mission
-logic in the wrong process. See
-[The Activity Host protocol](/docs/destiny-2/activity-host-protocol/).
+Bungie describes Beyond Light as moving mission scripting from the Mission Host to the Physics
+Host. Build 86657 comes before that change. A design based on a later build can put mission logic
+in the wrong process. See [The Activity Host protocol](/docs/destiny-2/activity-host-protocol/).
 
 ## Differences from Destiny 1
 
 Destiny 1 and Destiny 2 share the Tiger engine. They share the package container family and the
-FNV-1 name hash. The Destiny 1 facts below come from two sources: Bungie's GDC 2015 talk on the
-Destiny mission architecture, and the shipped Destiny 1 binary.
+FNV-1 name hash.
 
 Treat every Destiny 1 fact as a hypothesis for build 86657. It becomes a fact only when this build
-shows it.
+shows it. The Destiny 1 design is on
+[The Activity Host, Destiny 1](/docs/destiny-1/activity-host/#bungies-design), and its
+activity-physics join state under
+[Joining an activity](/docs/destiny-1/activity-host/#joining-an-activity).
 
 ### What carries over
 
 | Destiny 1 | status on build 86657 |
 |---|---|
-| The Activity Host is a light process that runs the mission script | design guide; not verified |
+| The Activity Host is a light process that runs the mission script | unverified |
 | Clients send Sense data and receive Auth data | verified: message 6 is Sense, client to host; message 5 is Auth, host to client |
-| Private missions and public bubbles have separate topology and lifetime | design guide |
-| Mission state is small, driven by sensors, and persistent | design guide |
+| Private missions and public bubbles have separate topology and lifetime | unverified |
+| Mission state is small, driven by sensors, and persistent | unverified |
 | The Activity Host hands out entity index leases and authority masks; the physics peer owns simulation | the same message family exists by name |
-| The client joins the Activity Host first, then waits for entity indices | not verified |
-
-Destiny 1 names an activity-physics join state in its RTTI. That state waits for a physics session
-and reconciles peer slots. It runs no physics, AI or combat code. That supports a small physics
-host endpoint, not a server-side simulation.
+| The client joins the Activity Host first, then waits for entity indices | verified: the client's activity slot is ready only after `join_result`, then `entity_slots_allocated` |
 
 ### What does not carry over
 
 - Message ids. The lease messages have different ids in each game.
 - Message bodies and bit layouts.
-- The 10 Hz rate, memory figures and console host placement from the talk.
+- Destiny 1's 10 Hz rate, memory figures and console host placement.
 - Sensor names, state layouts and trust rules.
 
 | message | Destiny 1 id | build 86657 id |
@@ -144,13 +166,11 @@ host endpoint, not a server-side simulation.
 | `purge_abandoned_entity_slots` | 24 | 25 |
 | `advance_replication_epoch` | 42 | 44 |
 
-In 2017 Bungie said Destiny 2 moved the Physics Host from player consoles to its data centers,
-beside the Mission Host. That is a second placement change between the two games.
+Destiny 2 runs the Physics Host in Bungie's data centers, beside the Mission Host.
 
 ## Open questions
 
 - Whether the package build time of 2020-08-25, two days after the executable, means a later
   content patch shipped with the same executable.
 - Whether PS4 build 87221 struct offsets hold beyond the ActivityClient.
-- The exact Destiny 1 layouts for the authority mask messages, and whether build 86657 uses the
-  same join order.
+- The exact Destiny 1 layouts for the authority mask messages.

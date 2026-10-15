@@ -1,7 +1,7 @@
 ---
 title: "The shared script libraries"
-date: 2026-09-17
-description: "Reference for lib.mission_lib, lib.flow, lib.campaign and lib.combat."
+date: 2026-10-15
+description: "Reference for lib.mission_lib, lib.flow, lib.campaign, lib.freeroam and lib.combat."
 weight: 80
 ---
 The `scripts/lib` folder holds plain Lua helpers that several missions share. They use only the
@@ -12,6 +12,7 @@ public API, so you can read them as worked examples. Load one with `require("lib
 | `lib.mission_lib` | constant guards, named variable scopes, small helpers |
 | `lib.flow` | a step graph: steps that wait on facts, with checkpoints |
 | `lib.campaign` | a full linear mission built from a content table, on top of `lib.flow` |
+| `lib.freeroam` | an open-world destination: zone population, respawns, public events, Lost Sectors |
 | `lib.combat` | pick the cheapest combat task group |
 
 ## `lib.mission_lib`
@@ -59,6 +60,7 @@ survives a reload.
 ### Build a flow
 
 ```lua
+local lib = require("lib.mission_lib")
 local flow = require("lib.flow")
 
 local graph = flow.new{
@@ -129,7 +131,7 @@ return {
 | `graph:cancel(context, state)` | stops the flow for this attempt |
 
 `advance` walks the steps in dependency order in one pass. A step that finishes lets the next step
-start in the same pass.
+start in the same pass. `handle` ignores an event from an older attempt.
 
 ### Attempts and checkpoints
 
@@ -163,7 +165,7 @@ Keep `key` and ids short. Use two flows when one would pass 64 steps; `lib.campa
 
 ## `lib.campaign`
 
-A campaign builds a whole linear mission from one content table. The Red War drafts use it.
+A campaign builds a whole linear mission from one content table. The Red War missions use it.
 
 ```lua
 local campaign = require("lib.campaign")
@@ -195,19 +197,29 @@ return campaign.new{
 | `key` | flow key; keep it short |
 | `directive_sensor` | the type-68 slot that shows goals |
 | `dialogue_sensor` | the type-53 slot for lines; needed when any step has `lines` |
-| `legs` | list of `{id, state, arm}`; the first leg is where the player spawns |
+| `legs` | list of `{id, state, arm, watch}`; the first leg is where the player spawns |
 | `steps` | the goals, in order |
 | `encounters` | squads to place, each after a step |
 | `intro` | optional list of `{state, cinematic}` cutscenes played before the first leg |
+| `outro` | optional list of `{state, cinematic}` cutscenes played after the last step |
 | `spawn_set` | optional spawn set hash for the arrival and every host move |
 | `finish` | optional `function(context)` run before the mission completes |
+| `complete` | `false` to end without `complete_mission`; default true |
 | `omit` | optional list of type-4 slots to keep out of every seed |
 
-A leg's `arm` lists the type-31 triggers to arm when the player enters that leg's region.
+A leg's `arm` lists the type-31 triggers to arm when the player enters that leg's region. Its
+`watch` lists the type-30 occupancy monitors to set up there. Each one reports when one player is
+inside.
 
-`campaign.new` builds `initial_state` for you. It opens on the first intro state when there is one,
-otherwise on the first leg's state, and it carries `spawn_set` and the omit list. The omit list also
-gets every object a step ends on with `interact`.
+`campaign.new` checks the table when the script loads. These are errors:
+
+- a step or encounter that ends on a trigger no leg arms, or on a monitor no leg watches
+- an encounter whose `after` names no step
+- a `health` end whose `at` is outside 0 to 1
+
+`campaign.new` builds `initial_state` for you. It opens on the first intro state when there is one.
+Otherwise it opens on the first leg's state. It carries `spawn_set` and the omit list. The omit list
+also gets every object a step ends on with `interact`.
 
 ### Opening cutscenes
 
@@ -230,6 +242,9 @@ What the library does:
 
 A mission with no `intro` never holds the spawn.
 
+An `outro` works the same way after the last step, without a spawn hold. Its first state is selected
+when the last step finishes. The mission completes once the last outro cutscene has ended.
+
 ### Step fields
 
 | field | meaning |
@@ -239,7 +254,10 @@ A mission with no `intro` never holds the spawn.
 | `navpoint` | optional type-47 slot for the map marker |
 | `waypoint` | optional type-60 volume; the marker hides inside it |
 | `lines` | list of `campaign.line(cue, filter)` to play at start |
-| `on_start` | optional `function(context)` |
+| `scene` | optional `mission.Scene` entry to activate at start |
+| `scene_spawn` | true to also spawn the scene's authored cast |
+| `inputs` | optional `lib.list` of `mission.SceneInput` keys sent to `scene` right after it starts |
+| `on_start` | optional `function(context, state)` |
 | `ends` | how the step ends; see below |
 | `barrier` | true when a later trigger must not skip this step |
 | `revisit` | true when the end trigger was already crossed earlier; arms it again at start |
@@ -249,14 +267,42 @@ A mission with no `intro` never holds the spawn.
 | key | ends when |
 |---|---|
 | `trigger` | a trigger slot, or a list of them, reports |
+| `monitor` | a type-30 monitor slot, or a list of them, reports a player entering |
 | `region` | the player enters that leg (a leg id) |
 | `clear` | the named encounter, or list, is cleared |
 | `ghost_link` | a Ghost scan on that slot starts and then finishes |
 | `interact` | the player uses that type-4 object |
 | `destroyed` | every listed object reports gone |
+| `scene` | that scene's slot reports finished after the step started |
+| `output` | `{slot, key}`: that scene reports that `mission.SceneOutput` key after the step started |
+| `health` | `{slot, at}`: a `damage_state` for that slot reports health at or below `at`, 0 to 1; a report from before the step started counts |
+| `await` | a `lib.flow` condition is true |
 
 A step with no `ends` finishes at once. Unless `barrier` is set, a step also ends when the player
-reaches any later step's trigger or region.
+reaches any later step's trigger, monitor or region.
+
+A scene that waits on an input never finishes until the input arrives. A step that ends on such a
+scene needs `inputs`. The examples use
+`local Input, Output = mission.SceneInput, mission.SceneOutput`:
+
+```lua
+{id = "reveal", scene = Scene.SCENE_IF_REVEAL,
+    inputs = lib.list(Input.SCENE_IF_REVEAL.T_START_SCENE),
+    ends = {scene = Slot.SCENE_IF_REVEAL}},
+{id = "hop_on", scene = Scene.SC_ZAVALA,
+    inputs = lib.list(Input.SC_ZAVALA.ZAVALA_START),
+    ends = {output = {slot = Slot.SC_ZAVALA, key = Output.SC_ZAVALA.T_END_SCENE_START_HOP_ON}}},
+```
+
+`scene` in `ends`, and `slot` in `ends.output`, take the scene's `mission.Slot` key, not its
+`mission.Scene` key:
+
+```lua
+{id = "minotaur", scene = Scene.SCENE_MINOTAUR, barrier = true,
+    ends = {scene = Slot.SCENE_MINOTAUR}},
+{id = "boss_half", barrier = true,
+    ends = {health = {slot = Slot.SQ_BOSS_BOSS, at = 0.5}}},
+```
 
 ### Encounter fields
 
@@ -265,10 +311,12 @@ reaches any later step's trigger or region.
 | `id` | encounter name; `ends.clear` uses it |
 | `after` | step id that must start first; default `"arrival"` |
 | `trigger` | optional trigger that must also report; it must be armed by a leg |
+| `monitor` | optional type-30 monitor that must also report; it must be watched by a leg |
+| `when` | optional `function(context, state)`; the encounter waits until it returns true |
 | `objective` | optional type-3 objective given to every squad before placing |
 | `squads` | list of `campaign.unit(squad, slot, group)` |
 | `lines` | optional lines to play |
-| `on_start` | optional `function(context)` |
+| `on_start` | optional `function(context, state)` |
 
 ### Helpers
 
@@ -277,6 +325,94 @@ reaches any later step's trigger or region.
 | `campaign.unit(squad, source, group)` | `{squad, source, group}`; `source` is the squad's type-1 slot |
 | `campaign.line(cue, filter)` | `{cue, filter}`; `filter` is an optional type-60 volume |
 | `campaign.move(context, slots, name)` | nothing; runs `transition` on each device with the named transition |
+| `campaign.run_seed(context)` | a positive integer from the attempt number; a seed for `generate_map` |
+
+The sandbox has no random source, so `run_seed` gives a new seed on each attempt and the same seed
+within one attempt.
+
+## `lib.freeroam`
+
+A freeroam program runs an open-world destination. Each zone is one authored state. The library
+places the zone's population when the player enters it, respawns patrols, rotates public events and
+runs Lost Sectors.
+
+```lua
+local freeroam = require("lib.freeroam")
+local content = require("edz_freeroam.content")
+local sectors = require("edz_freeroam.sectors")
+
+return freeroam.new{zones = content(mission, freeroam),
+    sectors = sectors(mission, freeroam)}
+```
+
+`freeroam.new` returns the whole program table. It sets no `initial_state`.
+
+### Definition table
+
+| field | meaning |
+|---|---|
+| `zones` | list of zones; see below |
+| `sectors` | optional table from region number to Lost Sector encounter `{squads, boss, chest}` |
+| `tick_ms` | service timer period; default 5000 |
+| `respawn_ms` | delay before a dead patrol squad returns; default 30000 |
+| `event_cooldown_ms` | delay before the next public event starts; default 120000 |
+
+Delays are counted in service ticks, so a respawn can be up to one tick late.
+
+### Zone fields
+
+| field | meaning |
+|---|---|
+| `region` | the zone's region number; two zones may not share one |
+| `state` | the `mission.states` row selected on entry |
+| `patrol` | list of units placed on entry and respawned after they die |
+| `ambient` | list of units placed on entry, never respawned |
+| `events` | list of public event sites; see below |
+| `sector` | optional Lost Sector; see below |
+
+An event site is `{sensor, objective, squads, chest}`: the type-71 public event sensor, the
+objective to reset, the units to place, and the chest objects shown when every squad is dead. One
+site runs at a time. After its cooldown, the next site in the list starts.
+
+A sector is `{squads, boss, chest, doors, blockers, crystals}`. An entry in `sectors` for the zone's
+region sets its `squads`, `boss` and `chest`, and makes the zone a sector if it is not one.
+
+| sector field | meaning |
+|---|---|
+| `squads` | units placed when the sector starts |
+| `boss` | the boss squad's type-1 slot; its death opens the chest |
+| `chest` | objects shown when the sector is cleared; without `boss`, every squad must die |
+| `doors` | list of `{slot, channel, value}`; each device snaps to that value at start |
+| `blockers` | objects removed at start |
+| `crystals` | list of `{object, monitor, guard, boss}`; see below |
+
+A crystal starts hidden, and its type-20 `monitor` watches it. A crystal with a `guard` squad slot
+appears when that squad dies. Once every crystal without `boss` is destroyed, the `boss` crystals
+appear.
+
+### Units
+
+`freeroam.unit(squad, slot, options)` pairs a squad with its type-1 slot. `options` may hold:
+
+| option | meaning |
+|---|---|
+| `counts` | list of member counts, one per authored member |
+| `objective`, `group` | a type-3 objective and task group assigned before placing |
+| `member` | a type-2 slot to `bind_combatant_to_squad` after placing |
+| `spawn_rule` | a type-66 slot used instead of the authored spawn rule |
+
+Without `counts`, each member's authored count is capped at 1.
+
+### What the library does
+
+- A public activity runs every zone without a sector. A private activity runs only the sectors.
+- A zone builds on its first entry. On a later entry, only patrol squads still waiting to respawn
+  are placed.
+- A sector starts as soon as the client reports its region, without selecting a state. Leaving it
+  removes its squads, so the next visit starts it again.
+- Every callback ignores events from an older attempt.
+- One timer, `tick`, drives every delay. The library stores its own state in the variable `held`
+  and under `z<region>.` names.
 
 ## `lib.combat`
 

@@ -1,6 +1,6 @@
 ---
 title: "Recipes"
-date: 2026-09-17
+date: 2026-10-15
 description: "Short answers to how do I spawn, open, show, play, wait and finish."
 weight: 70
 ---
@@ -11,6 +11,7 @@ local missions = require("missions")
 local mission = require(missions.MY_SCENARIO)
 local lib = require("lib.mission_lib")
 local Slot, Squad, Scene, Directive = mission.Slot, mission.Squad, mission.Scene, mission.Directive
+local Input, Output = mission.SceneInput, mission.SceneOutput
 ```
 
 Replace `MY_SCENARIO` and every `Slot.X` with real keys from your mission module.
@@ -28,8 +29,8 @@ source.
 - Basics: constants, variables, timers, phases, random numbers, lists
 - Where the player is: arrival, regions, states, triggers, occupancy
 - Enemies: squads, counts, objectives, clears, damage
-- The world: devices, objects, interactables, filters, darkness
-- Presentation: goals, dialogue, music, public events, idles, scenes, cinematics
+- The world: devices, objects, interactables, filters, darkness, map generators
+- Presentation: goals, goal counters, dialogue, music, public events, idles, scenes, cinematics
 - Actors: paths, abilities, atoms, sequences, commands
 - Flow: request results, step graphs, several areas, checkpoints, completion
 - Players: peers and party life
@@ -128,8 +129,8 @@ return {
 }
 ```
 
-`state.phase` reads the current phase. A variable works just as well. Use the phase when you like
-one number that names the stage.
+`state.phase` reads the current phase. A variable works too. Use the phase when you want one number
+that names the stage.
 
 ### Random numbers
 
@@ -214,7 +215,7 @@ Set `initial_state` in the program. The host selects it before `on_start` runs.
 return {
     initial_state = mission.states.STATE_80B48062_0002_0001_80B4805D,
     on_start = function(context, state)
-        -- the player is in that state now
+        -- the state is selected and published
     end,
 }
 ```
@@ -225,7 +226,7 @@ Give a table instead when you need more than the region:
 |---|---|
 | `region_index` | the state to open on; required |
 | `spawn_set_hash` | the authored spawn set the arrival and every host move use |
-| `omit` | type-4 slots to keep out of every seed; up to 32 |
+| `omit` | slots whose objects stay out of every seed; up to 32 |
 
 Read the spawn set hash off the **Closest spawn** line of the Current Status overlay, standing
 where the player should arrive. See [Finding things in game](/docs/mission-scripting/finding-things/).
@@ -238,7 +239,7 @@ initial_state = {
 },
 ```
 
-Spawn an omitted object later with `set_object_active`.
+Spawn an omitted object later with `activate_objects` or `set_object_active`.
 
 ### Hold the spawn for an opening cutscene
 
@@ -406,8 +407,8 @@ context:squad(Squad.SQ_GUARDS):place{mode = context.sdk.squad_modes.replace}
 | mode | wire value | use in the existing scripts |
 |---|---|---|
 | `reinforce` | 0 | the default; standing squads |
-| `replace` | 2 | repeated waves in `tangled_shore/port.lua` |
-| `reserve` | 3 | not used by any current script |
+| `replace` | 2 | repeated waves, public event squads and resets in `lib/freeroam.lua` |
+| `reserve` | 3 | a scene's cast, placed just before the scene starts, in `mission_scot.lua` and `mission_abs.lua` |
 
 ### Spawn a different number
 
@@ -430,6 +431,9 @@ local counts = squad:counts()
 for index = 1, counts.count do counts:set(index, 0) end
 squad:place{counts = counts}
 ```
+
+*Field note* (`lib/freeroam.lua`): a squad that still has a live member ignores a new placement.
+To fill it again, place all-zero counts first, then place it again later.
 
 ### Use another spawn rule
 
@@ -580,7 +584,7 @@ end
 ```
 
 - `applied` is false while your latest request is queued.
-- It turns true once the client reported a value for that latest request.
+- It turns true once the client has reported a value for that latest request.
 - In `on_event_device_state`, `event:applied_request{channel = c}` gives the exact request key.
 - The event also has `position`, `power` and `lock`.
 
@@ -679,6 +683,17 @@ context:slot(Slot.HARD_WIPE_GLOBALS):set_darkness_zone{enabled = false}
 
 `wipe_seconds` (0 to 3) starts the wipe countdown. It needs `enabled = true`.
 
+### Run a map generator
+
+```lua
+context:slot(Slot.MAP_GENERATOR_SENSOR):generate_map{seed = 12345, enabled = true}
+```
+
+- The slot must be type 37.
+- `lib.campaign` has `campaign.run_seed(context)`, which gives a new seed on each attempt.
+- The other arguments are raw inputs whose meaning is not known yet. See
+  [Lua API reference](/docs/mission-scripting/lua-api/).
+
 ---
 
 ## Presentation
@@ -692,7 +707,7 @@ context:slot(Slot.M_DIRECTIVE_SENSOR_80B9AF4B):set_directive{
 }
 ```
 
-- The directive must belong to that sensor. Its `slot_row` names the sensor.
+- The directive must belong to that sensor. Its `sensor` equals that sensor's `mission.Slot` value.
 - `navpoint` (type 47) places the map marker.
 - `waypoint` (type 60) is a volume where the marker hides.
 - `audience` (type 70) is the engagement sensor for the mission banner.
@@ -704,6 +719,19 @@ context:slot(Slot.M_DIRECTIVE_SENSOR_80B9AF4B):set_directive{
 - Sending the same goal again moves the marker without a popup.
 - A goal sent before its marker's object is registered shows no marker. Send it again once the
   area that holds the object is loaded.
+
+### Show a counter on the goal
+
+```lua
+context:slot(Slot.M_DIRECTIVE_SENSOR_X):set_directive{
+    directive = Directive.X,
+    progress = {kills, 20},
+}
+```
+
+- The directive entry must have `counter = true` in the mission module.
+- `progress` holds 1 to 4 int32 values, for example the current count and the maximum.
+- Send the goal again with new values each time the count changes.
 
 ### Hide the goal
 
@@ -752,7 +780,9 @@ context:slot(Slot.M_PUBLIC_EVENT_SENSOR_80FD9392):set_public_event_state{
 - `area` is the object whose zone bounds the event.
 - `leave_seconds` is how long a player may be outside before the client reports it.
 - `player` defaults to this link's player.
-- `tangled_shore/port.lua` runs three events with cooldown timers.
+- `lib.freeroam` runs whole public event sites: it resets the objective, places the squads, sends
+  this request, and restarts the event after a cooldown. See
+  [The shared script libraries](/docs/mission-scripting/libraries/).
 
 ### Play NPC idle animations
 
@@ -767,8 +797,12 @@ context:slot(Slot.VENDOR_ZAVALA_IDLE):play_performance{
 
 ### Start an authored scene
 
+Start the scene, then fire the inputs it waits on:
+
 ```lua
-context:scene(Scene.SC_BAR_SCENE):activate{}
+local portal = context:scene(Scene.SCENE_IKORA_OPENS_PORTAL)
+portal:activate{}
+portal:send_event{key = Input.SCENE_IKORA_OPENS_PORTAL.T_START_SCENE}
 ```
 
 | request | effect |
@@ -776,9 +810,46 @@ context:scene(Scene.SC_BAR_SCENE):activate{}
 | `activate{}` | start the scene |
 | `activate{spawn = true}` | also spawn its authored cast |
 | `stop{}` | stop it |
-| `send_event{key = n}` | send signal `n` to the running scene |
+| `send_event{key = Input.X.NAME}` | fire one of the scene's inputs |
 
-`on_event_scene_finished` fires when the scene reports it is done.
+- Look up the scene in `mission.SceneInput` to see what it waits on. A scene with no entry there
+  plays on its own.
+- Send an input after `activate{}`, in the same callback or later. Requests leave in order.
+- `on_event_scene_finished` fires when the scene reaches its end.
+- An input named `T_FOREVER` exists to be waited on forever. Do not send it.
+- A `KEY_<hash>` name means the trigger's name is unknown. The key is still exact.
+
+### Wait for a scene output
+
+```lua
+on_event_scene_output = function(context, state, event)
+    if lib.is_slot(context, event, Slot.SC_ZAVALA)
+        and event.key == Output.SC_ZAVALA.T_END_SCENE_START_HOP_ON then
+        -- the scene reported it is done with its part
+    end
+end,
+```
+
+- `event.key` is the output; `event.activation_token` names the run that fired it.
+- Each output fires once per run of the scene. Starting the scene again starts a new run.
+- The first report of a scene is recorded silently, like other first reports.
+- An output arrives once and is not replayed. Keep a variable if a later step needs to know it
+  came.
+
+### Drive a scene from a campaign step
+
+```lua
+{id = "portal", scene = Scene.SCENE_IKORA_OPENS_PORTAL,
+    inputs = lib.list(Input.SCENE_IKORA_OPENS_PORTAL.T_START_SCENE),
+    ends = {scene = Slot.SCENE_IKORA_OPENS_PORTAL}},
+{id = "hop_on", scene = Scene.SC_ZAVALA,
+    inputs = lib.list(Input.SC_ZAVALA.ZAVALA_START),
+    ends = {output = {slot = Slot.SC_ZAVALA, key = Output.SC_ZAVALA.T_END_SCENE_START_HOP_ON}}},
+```
+
+- `inputs` are sent right after the step starts its scene.
+- A step that ends on a scene hangs if the scene waits on an input nobody sends.
+- See [The shared script libraries](/docs/mission-scripting/libraries/) for every step field.
 
 ### Play a cinematic
 
@@ -919,8 +990,8 @@ Results arrive after the whole request queue is empty.
 
 ### Build the mission as steps
 
-Use `lib.flow`. Each step waits for facts, then runs once. See [The shared script libraries](/docs/mission-scripting/libraries/) for the full
-reference. A small example:
+Use `lib.flow`. Each step waits for facts, then runs once. The full reference is in
+[The shared script libraries](/docs/mission-scripting/libraries/). A small example:
 
 ```lua
 local flow = require("lib.flow")
@@ -955,28 +1026,43 @@ For a linear story mission, `lib.campaign` builds all of this from a content tab
 
 ### Run several areas in one script
 
-Give each area its own tag and keep its variables and timers under that tag.
-`scripts/tangled_shore_freeroam/tangled_shore_freeroam.lua` does this:
+Give each area its authored state and its content. Build an area when the player first reaches its
+region, and store a mark so a return visit does not place everything again.
+`scripts/city_tower_social_d2/city_tower_social_d2.lua` does this:
 
 ```lua
-local BUBBLES = {require("tangled_shore.port")(mission)}
+local AREAS = {
+    {state = mission.states.STATE_X, squads = lib.list(Squad.SQ_A, Squad.SQ_B),
+        objects = lib.list(Slot.O_CRATE)},
+    {state = mission.states.STATE_Y, squads = lib.list(Squad.SQ_C), objects = {}},
+}
+
+local function area_for(region)
+    for _, area in ipairs(AREAS) do
+        if area.state.region_index == region then return area end
+    end
+    return nil
+end
 
 return {
     on_event_region_changed = function(context, state, event)
-        for _, bubble in ipairs(BUBBLES) do
-            if bubble.state.region_index == event.region_index then
-                bubble.enter(context, lib.scope(context, state, bubble.tag))
-            end
-        end
+        local area = area_for(event.region_index)
+        if area == nil then return end
+        local built = "built_" .. area.state.region_index
+        if state:variable(built) then return end
+        context:set_variable(built, true)
+        -- Squads first, then the state; objects and scenes bind under the new state.
+        lib.place_all(context, area.squads, context.sdk.squad_modes.reinforce)
+        context:select_state(area.state)
+        context:activate_objects{slots = area.objects, active = true}
     end,
 }
 ```
 
-The real script also remembers which areas it has entered, so a return visit does not place
-everything again.
-
+When areas run timers, keep each area's variables and timers under its own tag with `lib.scope`.
 Stop an area's timers when the player leaves it, so no request reaches an area the client does not
-hold.
+hold. For an open-world destination, `lib.freeroam` does all of this. See
+[The shared script libraries](/docs/mission-scripting/libraries/).
 
 ### Wipe and restart at a checkpoint
 

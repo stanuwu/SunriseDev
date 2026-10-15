@@ -1,6 +1,6 @@
 ---
 title: "The world model"
-date: 2026-09-17
+date: 2026-10-15
 description: "Activity, scenario, state, region, slot, squad: the words the other pages use."
 weight: 20
 ---
@@ -44,7 +44,7 @@ A **region** is the number that names one state. It is what the client reports w
 region_index = slice_set_index + state_ordinal;
 ```
 
-- Bubbles often step by 8, so regions look like 0, 8, 16, 24.
+- Slice-set indices step by 8, one block of 8 per bubble, so regions look like 0, 8, 16, 24.
 - Two states of one bubble differ in the ordinal, for example 16 and 17.
 - `context:select_state(state)` asks the client to load one state.
 - `initial_state` in your program picks the state the player spawns into.
@@ -59,7 +59,7 @@ Each slot has:
 
 | field | meaning |
 |---|---|
-| `id` | stable text id, `slot/<object tag>/<ordinal>/<slot index>/<slot type>` |
+| `id` | stable text id, `slot/<object tag>/<ordinal>/<slot index>/<slot type>`, all in hex |
 | `name` | authored name, for example `pt_mines_start` |
 | `type` | what the slot is; see the table below |
 | `index` | the slot's index inside its object's registry |
@@ -71,7 +71,7 @@ The slot type decides which methods work. Calling a method on the wrong type is 
 | type | what it is | common name prefix | main methods |
 |---|---|---|---|
 | 1 | squad spawner | `SQ_` | `assign_combat_objective` (on the slot), `place` (on the squad) |
-| 2 | one combatant or actor in a squad | `SQ_<squad>_<name>` | `run_atoms`, `play_actor_path`, `play_actor_action`, `play_sequence`, `retire_actor` |
+| 2 | one combatant or actor in a squad | `SQ_<squad>_<name>` | `run_atoms`, `play_actor_path`, `play_actor_action`, `play_sequence`, `sequences`, `retire_actor`, `bind_combatant_to_squad` |
 | 3 | objective | `OBJ_` | `reset_objectives`, target of `assign_combat_objective` |
 | 4 | authored object (prop, pickup, chest) | `O_` | `set_object_active`, `set_interactable_object` |
 | 5 | authored sequence | `SEQ_` | `play_sequence` |
@@ -83,6 +83,7 @@ The slot type decides which methods work. Calling a method on the wrong type is 
 | 31 | player trigger | `PT_` | `fire_trigger`, `disarm_trigger` |
 | 34 | object filter | `OF_` | `set_object_filter` |
 | 35 | hard-wipe globals (darkness zone) | varies | `set_darkness_zone` |
+| 37 | map generator | `MAP_GENERATOR_SENSOR_...` | `generate_map` |
 | 38 | task sensor | varies | `advance_task` |
 | 42 | performance sensor (NPC idle) | `..._IDLE` | `play_performance` |
 | 43 | authored scene | `SC_` | use `context:scene(...)` |
@@ -97,7 +98,8 @@ The slot type decides which methods work. Calling a method on the wrong type is 
 | 71 | public event sensor | `M_PUBLIC_EVENT_SENSOR_...` | `set_public_event_state` |
 
 The prefixes are an authoring habit, not a rule. Always check the `type` field in the generated
-module. Slots with no authored name are called `SLOT_<index>_<tag>`.
+module. A slot with no authored name is named after its slot index in hex, for example
+`SLOT_01DD`. Some take their auth type name in place of `SLOT`.
 
 ## Squad
 
@@ -112,10 +114,21 @@ A squad is a group of enemies or NPCs that spawn together.
 ## Scene
 
 A scene is a small authored script that the client runs, for example two NPCs talking, or enemies
-jumping down from a ledge.
+jumping down from a ledge. Each scene is a graph of blocks. The blocks talk through named
+triggers: a block waits for a trigger, or fires one.
 
-- `context:scene(mission.Scene.X):activate{}` starts it.
-- `stop{}` ends it and `send_event{key = n}` sends it a signal.
+| trigger | who fires it | in the generated module |
+|---|---|---|
+| start | the client, when the scene starts | not listed |
+| input | your script | `mission.SceneInput.<SCENE>.<NAME>` |
+| output | the scene | `mission.SceneOutput.<SCENE>.<NAME>` |
+| internal | the scene, for its own blocks | not listed |
+
+- `context:scene(mission.Scene.X):activate{}` starts it. `stop{}` ends it.
+- `send_event{key = mission.SceneInput.X.NAME}` fires an input. The blocks waiting on it run.
+- When the scene fires an output, the script gets `on_event_scene_output`. When it reaches its end,
+  the script gets `on_event_scene_finished`.
+- A scene with inputs often does nothing until one arrives. A scene with no inputs plays on its own.
 
 ## Directive and dialogue
 

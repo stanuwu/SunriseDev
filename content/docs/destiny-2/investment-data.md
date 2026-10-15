@@ -1,6 +1,6 @@
 ---
 title: "Items, characters and inventory"
-date: 2026-09-28
+date: 2026-10-15
 description: "The account, character and item objects the client holds, and the package tables they point into."
 weight: 30
 ---
@@ -33,6 +33,9 @@ struct. The schema hash names the struct.
 
 Every object is keyed by a 64-bit id in its first 8 bytes. The account object uses the account id.
 A character object uses the character id. An item record uses the item instance id.
+
+The account object, the character object and the item instance record are also the bodies of web
+service responses 201, 202 and 203.
 
 ### Empty is a property of the type
 
@@ -125,6 +128,11 @@ Three rules come from the readers:
 - Keep a quantity at or below the item's own max stack (definition `+180`). The client does not
   clamp it. An over-cap stack reads as "bucket full".
 
+A character inventory entry also needs two companion values before it draws. One is its bit in a
+new-item bitmap at character `+15148`. The other is a per-slot i32 at `+15192 + 4 * slot`. The
+client compares that i32 with the item record's progress value at `+184`, so it is a watermark, not
+a flag. The need for both is seen in game; no traced reader explains it.
+
 ### Equipment references and the light summary
 
 The roster rows use a smaller equipment reference:
@@ -179,8 +187,8 @@ struct CharacterRecord {                /* 3904 bytes, schema 0x80807992 */
     /* The appearance block starts here and runs to +0xF10. */
     int32_t  level;                     /* +0x068 */
     float    levelProgress;             /* +0x06C  level with its fraction */
-    float    power;                     /* +0x070  the light shown on cards and the banner */
-    float    inventoryPower;            /* +0x074  a second power value; write both */
+    float    power;                     /* +0x070  the light on cards, banner and inventory */
+    float    bannerPower;               /* +0x074  read only by the banner component; write both */
     struct {
         int8_t   kind;                  /*         0xFF when empty */
         uint8_t  pad[3];
@@ -207,8 +215,13 @@ Notes on the fields:
 
 - The client copies all 3752 bytes of the appearance block over a package default. Nothing
   recomputes them. So every zero the server sends replaces a default the client had loaded.
-- The customization rows must belong to the character's race and gender. A row from another race
-  gives the model the wrong head. Which option group is face, hair or markings is not verified.
+- The customization header is the same 36-byte struct as character object `+12`. Its first `i16`
+  is a face preset row; if that row does not resolve, no customization is built at all. The next
+  three bytes pick option variants. The `i16` fields after them are dye indices, `-1` for empty.
+  Its last byte, record `+44`, must be 1.
+- The face preset must come from the character's own race and gender row. A preset from another
+  race gives the model the wrong head. The client does not check the dyes against the row. Which
+  option group is face, hair or markings is unverified.
 - The 12 ability buckets have fixed meanings. Bucket 0 is the grenade, 1 the super, 2 the melee,
   3 the jump, 4 sprint and movement, 5 the dive. Buckets 6, 9 and 11 are the class ability, and the
   last non-empty one wins. Buckets 7, 8 and 10 are not read.
@@ -302,6 +315,14 @@ mask is exactly what the server sent. So send `0xFFFFFFFF`. A 0 blanks every ite
 The eight roll ordinals at `+0x0EE` are the item's random roll. The client picks one byte and reduces
 it by the number of candidates. So regenerating these bytes changes the roll.
 
+Fill every socket lane the item holds. A lane at `0xFFFF` is a socket with no plug. It does not fall
+back to the plug the item definition declares.
+
+Some perks come in two variants that must not both be published. For example, Worldline Zero's
+completed catalyst replaces the normal Tesseract perk with a faster variant (perk 745 instead of
+744). The two run the same effect with a different delay. The item definitions select one by an
+enable expression on a value slot. Publishing both perk indices runs the effect twice.
+
 ### The subclass tree
 
 A subclass has no separate replicated tree. The tree hangs off the equipped subclass item's own
@@ -319,7 +340,9 @@ The entry index has a fixed meaning across all nine subclasses:
 
 | entry | socket |
 |---|---|
-| 0, 1, 19 | never drawn |
+| 0 | base melee target; never drawn; differs by guardian class, not by subclass |
+| 1 | base sprint selector; never drawn |
+| 19 | shared marker; never drawn |
 | 2, 3 | class ability |
 | 4 to 6 | movement |
 | 7 to 9 | grenade |
@@ -329,7 +352,27 @@ The entry index has a fixed meaning across all nine subclasses:
 | others | tree perks |
 
 Each entry names one plug pool, and each pool holds exactly one plug in this build. The state byte
-only says whether the socket is absent, present or active. It cannot name a plug.
+only says whether the socket is absent, present or active. It cannot name a plug. Entries 0, 1, 19
+and the super at 10 carry no plug source at all.
+
+The selected movement ability is a different entry per class:
+
+| class | subclasses | entry | ability |
+|---|---|---:|---|
+| Hunter | all three | 6 | Triple Jump |
+| Titan | all three | 5 | Strafe Lift |
+| Warlock | Stormcaller, Dawnblade | 5 | Burst Glide |
+| Warlock | Voidwalker | 6 | Burst Glide |
+
+The Warlock rows are confirmed in game. The Hunter and Titan rows follow from the same table and are
+assumed.
+
+The instance record's progression index at `roll +0x0C` must be `0xFFFF` on a subclass. A 0 there
+names progression row 0. With `0xFFFF` the sockets draw, and none of them shows as selected.
+
+A subclass names its three Forsaken trees as objective indices, at item definition member `+48`.
+For example, Gunslinger (item 1189) names objectives 1361 Knife Trick, 1362 Playing with Fire and
+1363 The Burning Edge.
 
 Ability names are not items. They come from a display table where the string hash is the socket and
 the string bank is the subclass.
@@ -346,7 +389,7 @@ Rules for `socketEntryList`:
 The item names its row at definition member `+128`. That member heads an 8-byte block whose first
 u16 is the row. Across all 15424 items, nine carry a non-zero row, and those nine are the
 subclasses. This mapping comes from the data. No client reader of member `+128` is known, so it is
-not verified in code.
+unverified in code.
 
 ## The package tables
 
@@ -354,8 +397,9 @@ All the tables below are package data. None is in the executable.
 
 ### The root blob
 
-The tables hang off one package named tag, `investment_globals`. The client finds it by name through
-the named-tag lookup ([Packages](/docs/destiny-2/packages/)).
+The tables hang off one package named tag, `investment_globals`, tag `0x81A2926E`. A package
+named-tag table names it. Which lookup the client resolves the name through is unverified; see
+[Name hashes](/docs/destiny-2/tags-and-definitions/#name-hashes).
 
 - `investment_globals` holds 81 children. Child 0 is the investment root blob.
 - The root blob (1912 bytes) holds 119 table slots.
@@ -372,18 +416,44 @@ virtual table. Callers use the getter, not the offset.
 | 88 | activity types | 54 |
 | 184 | investment constants | -- |
 | 280 | inventory buckets | 49 |
+| 312 | collectibles | 5181 |
 | 408 | destinations | 48 |
+| 456 | map node placements | 927 |
+| 472 | destination map nodes | 953 |
 | 504 | places | 27 |
+| 536 | equipment slots | 19 |
 | 776 | item definitions | 15424 |
+| 824 | plug sets | 607 |
+| 840 | item lore | 1425 |
+| 936 | objectives | 8483 |
+| 984 | requirement lists | -- |
+| 1016 | presentation nodes (the Collections tree) | 924 |
 | 1096 | progressions | 88 |
+| 1160 | records | 2242 |
+| 1416 | vendor sale items (assumed) | 979 |
+| 1432 | seasons | 12 |
+| 1512 | socket types | -- |
 | 1528 | stats | 61 |
 | 1560 | socket entry lists | 14 |
+| 1704 | sandbox perk gameplay index | -- |
 | 1752 | shared expression pool | 6541 |
 | 1784 to 1832 | unlock flag and value maps | -- |
+| 1848 | unlock value counters | 62 |
+| 1864 | vendor definitions | 511 |
 
 Most catalogs come in pairs. The root blob holds the half the game logic reads. A child of
 `investment_globals` holds the half with the display strings. Both halves have the same rows in the
 same order, so one row index works in either.
+
+What the collectible, objective, record, vendor and other catalogs hold is on
+[Collections, vendors and other catalogs](/docs/destiny-2/content-catalogs/).
+
+### How investment content loads
+
+The tables and the string containers load with `investment_globals`, through its manifest. Item
+definitions, vendor records and string language data load only when the UI asks for their handles.
+No package dependency record lists any of them. A string container is read in place and never
+requested, so a container loads only if a manifest lists it.
 
 ### Reading a table
 
@@ -441,9 +511,10 @@ const void *item_block(const ItemDefinition *def, uint32_t member)
 
 The bounds check sign-extends the index from 16 bits. That is why `0xFFFF` resolves to NULL.
 
-The hash-to-index loop is how offline tools map a published hash. The client's own hash lookup is
-not known. Published item hashes from Season of Arrivals or earlier resolve against this build. A
-miss usually means a later reissue of the item.
+The hash-to-index loop maps a published hash to its row. The client's own hash lookup is not known.
+Published item hashes from Season of Arrivals or earlier resolve against this build. A
+miss usually means a later reissue of the item. For example, Austringer `2429822977` is item 8021,
+Trust `4077196130` is item 6062 and Worldline Zero `1864563948` is item 4718.
 
 A second table, parallel to this one, has the same 15424 hashes in the same order. Its rows point at
 the per-item string record instead of the gameplay record.
@@ -451,7 +522,7 @@ the per-item string record instead of the gameplay record.
 ### The item definition
 
 The definition record lists its object members with names. The names are FNV-1 hashes of lowercase
-strings, and the strings are recovered. So these member names are Bungie's.
+strings. The strings below match those hashes, so these member names are Bungie's.
 
 | offset | member | offset | member |
 |---:|---|---:|---|
@@ -461,8 +532,12 @@ strings, and the strings are recovered. So these member names are Bungie's.
 | 32 | `gearset_item_block` | 128 | `talent_grid_item_block` |
 | 40 | `lore_item_block` | 136 | `translation_item_block` |
 | 48 | `objective_item_block` | 144 | `unlock_item_block` |
-| 64 | `plug_item_block` | 152 | `value_item_block` |
-| 72 | `quality_item_block` | 176 | `inventory_item_block` |
+| 56 | `metric_item_block` | 152 | `value_item_block` |
+| 64 | `plug_item_block` | 176 | `inventory_item_block` |
+| 72 | `quality_item_block` | 224 | `traits` |
+| 80 | `record_item_block` | | |
+| 88 | `sack_item_block` | | |
+| 96 | `set_item_block` | | |
 
 Plain scalars are not in that list. Two matter:
 
@@ -478,11 +553,65 @@ Notes:
 - `translation_item_block` is the art block: gear art, geometry and dyes. It is 0 when the item has
   no art.
 - Member `+128` is read here as the socket entry list row. Its shipped name says talent grid. Which
-  reading is right is not verified.
-- Item stats live in `stats_item_block`, as 40-byte entries with the stat row at `+16` and the value
-  at `+20`. An item instance carries no stat override.
-- The same block holds a list of sandbox-perk indices. The character record's perk lists are built
-  from it, for the base item and then each equipped plug.
+  reading is right is unverified.
+- `plug_item_block` leads to a record whose class marker `0x808077E3` usually sits at `+388`, with
+  the plug category hash 4 bytes after it. An optional record ahead of it can shift it, so find the
+  marker rather than assume the offset. A socket accepts a plug when its whitelist lists that
+  category.
+- `lore_item_block` points at a 4-byte block: a `u16` lore row, then zero. `0xFFFF` means no lore.
+  1323 items have lore, sharing 689 rows.
+- An item instance carries no stat override. Item stats are content.
+
+### Item stats and sandbox perks
+
+`stats_item_block` points at a 32-byte block with two arrays:
+
+| array | row size | fields |
+|---|---:|---|
+| investment stats, at `+0` | 40 | `u8` stat row at `+0`, `i32` value at `+4`, value expression at `+8`, activation expression at `+24` |
+| sandbox perks, at `+16` | 24 | `u16` perk index at `+0`, activation expression at `+8` |
+
+The client evaluates each stat row's activation and value expressions and sums rows of the same
+stat. A positive computed value replaces the stored one. These are base inputs, not the numbers the
+UI shows.
+
+The sandbox-perk rows feed the character record's perk lists: the base item's perks first, then
+each equipped plug's.
+
+The number Inspect shows comes from a display curve. The item's display record selects a stat group,
+and each stat in the group has a list of `{i32 input, i32 output}` points. The client clamps to the
+end points, interpolates in single precision and rounds to the nearest integer, ties to even. A stat
+with no row in the group shows its raw value. For example, Forward Path's raw rate of fire 80 shows
+as 600.
+
+Perk names and icons come from a separate display table; see
+[Sandbox perk names](/docs/destiny-2/content-catalogs/#sandbox-perk-names).
+
+### Render art
+
+The art block names the gear-art index and an arrangement index for the render array. The art is
+class-specific: the same armor set uses different art rows on a Hunter, a Titan and a Warlock. The
+client takes the first art row whose class byte is `-1` or equals the character's class (0 Titan,
+1 Hunter, 2 Warlock).
+
+### Item lore and socket types
+
+The lore row index selects the same row in two tables. The display table row holds a title, a
+subtitle, a body and a `u16` icon. The gameplay table row holds only the lore hash. No reader uses
+the hash. A new lore row goes at the same index in both tables.
+
+A socket's type number selects the same row in two tables in the same way. The gameplay row holds
+the insertion rules:
+
+| gameplay row | meaning |
+|---|---|
+| `+8` | insertion rule: 1 refuses insertion, 2 refuses when the socket is empty |
+| `+16` | insertion unlock expression; false refuses |
+| `+39` | plug bucket, or `0xFF` |
+| `+40` | plug whitelist, 8-byte rows led by a plug category hash |
+
+Exotic weapons have their own socket types. Tommy's Matchbook uses type 728 for its ornament and 725
+for its catalyst.
 
 ### Buckets and equipment slots
 
@@ -517,7 +646,7 @@ buckets. It reads as the equipment slot:
 | 9 | 2 | Power | | | |
 
 This table matches the order in the data. No client code that turns a bucket into a slot is known,
-so the link is not verified.
+so the link is unverified.
 
 ### Constants
 
@@ -527,9 +656,29 @@ The investment constants blob holds small game-wide numbers. The getter returns 
 |---:|---:|---|
 | 592 | 0 | the stat row that holds light |
 | 593 to 595, 622 to 624 | 4, 3, 5, 7, 6, 8 | the six character stat rows the sheet shows |
-| 600 to 619 | -- | the weapon stat rows, one byte each |
+| 600 to 619 | -- | the weapon stat rows, one byte each; below |
+| 646, 648 | 14, 1 | the two progressions the banner's XP fields show |
 | 650 | 7 | the character-level progression |
 | 664 | 50 | the level cap |
+
+The weapon stat bytes name rows of the stats table. `0xFF` is empty.
+
+| offset | row | stat | offset | row | stat |
+|---:|---:|---|---:|---:|---|
+| 600 | 14 | Rounds Per Minute | 610 | 27 | Reload Speed |
+| 601 | 24 | Magazine | 611 | 18 | Charge Time |
+| 603 | 32 | Zoom | 612 | 15 | Impact |
+| 604 | 17 | Accuracy | 614 | 25 | Inventory Size, the reserves stat |
+| 605 | 22 | Stability | 615 to 617 | 26 | Handling |
+| 607 | 20 | Velocity | 618 | 30 | Aim Assistance |
+| 608 | 16 | Range | 619 | 31 | Recoil Direction |
+| 609 | 21 | Blast Radius | | | |
+
+The stat names are assumed. They rest on these bytes forming one coherent weapon-stat list.
+
+A sword has no reserve stat. No sword declares Inventory Size, and a sword's whole supply is its
+magazine. The supply is a float with its own setter, which clamps to the sword's maximum. Ordinary
+weapons store magazine and reserves as encoded integers, and those setters do not clamp.
 
 ### Names come from string banks
 
@@ -543,7 +692,9 @@ No item name is in the executable. Names are in localized string banks in the pa
 - The hash is FNV-1.
 
 13884 of the 15424 items have a name. Lore, collectibles, stats, destinations, classes and activity
-modes are named through the same chain.
+modes are named through the same chain. The language data layout is on
+[Collections, vendors and other catalogs](/docs/destiny-2/content-catalogs/#strings), and so is how
+an item picks its [icon](/docs/destiny-2/content-catalogs/#item-icons).
 
 ## Unlock flags and the evaluator
 
@@ -574,62 +725,86 @@ The flag space has 21613 slots and the value space 13231.
 - 197 slots with no byte are computed from the player's items.
 - The other no-byte slots read false, unless an override list writes them.
 
-A second route exists. An account-wide object carries two override lists of `{slot, value}` pairs,
-100 rows each. The client copies them into the buffer after every mapping table, with no bounds or
-kind check. So an override can set a slot that has no backing byte, and can clear most others.
+A second route exists. One more pushed object, family 5, carries two override lists of
+`{slot, value}` pairs, 100 rows each. The client copies them into the buffer after every mapping table, with no bounds or
+kind check. So an override can set a slot that has no backing byte, and can clear most others. A
+flag set by progression cannot be cleared this way: progression writes a lower-priority buffer that
+a 0 falls through to. The slot is a signed 16-bit raw offset, so a bad slot writes out of bounds.
+Keep flag slots in 0 to 23499 and value slots in 0 to 15499.
 
 Entering an activity also writes flags. The activity record carries a write list, and every value in
-it is 2.
+it is 2. Across all 1170 activities that is 5892 writes to 389 slots, and only 2 of those slots are
+settable from any object the server sends. The destination row and the matching bubble carry write
+lists of the same form.
 
 Only 108 flags have a display name in the unlock definition table. The rest are identified by what
-their expressions gate. About a third of the slot space is stored by the client and never read by
-any expression.
+their expressions gate. About a quarter of the flag slots, 5197, have a backing byte that no
+expression reads.
+
+Expressions are not the only readers. Some content records carry a plain `u16` unlock slot field,
+`0xFFFF` for none, and code tests it directly:
+
+| table | field | slots |
+|---|---|---:|
+| records | `+100`, completion | 2222 |
+| progression steps | step `+36` | 760 |
+| activity definitions | `+216` | 208 |
+| achievements | `+4` | 122 |
+| requirement lists | row `+0` | 239 |
+| records | `+98`, category gate | 64 |
+
+Every season-pass and rank-step flag is read only this way. No call to the client's flag readers
+passes a constant slot. Every reader takes the slot from a record or an argument. An inline test
+with no call was not searched for.
+
+The 3828 stored flags with no reader do not form one subsystem. They split into 915 runs spread
+across the slot space. The server writes them. The client mirrors most of them and never reads
+them.
+
+### Entitlement flags
+
+Ownership is unlock flags in the account object at `+74384`. Fourteen flag slots resolve their
+unlock hash directly as a string in bank 16. Eight of those are the platform set:
+
+| slot | index | text |
+|---:|---:|---|
+| 577 | 3 | Next-Gen Platform |
+| 581 | 5 | a different platform |
+| 583 | 7 | a different platform |
+| 584 | 8 | Stadia |
+| 585 | 9 | Steam |
+| 586 | 10 | Online Enabled Account |
+| 587 | 11 | Full Purchase |
+| 588 | 12 | User-Generated Content is Blocked |
+
+Slots 584, 585 and 587 have no expression reader. "Full Purchase" gates nothing. The store's
+full-game gate is slot 302, index 1: 1062 expressions read it.
+
+The full-version and expansion flags are named by the unlock definition table:
+
+| slot | index | name |
+|---:|---:|---|
+| 2260, 2261 | 132, 133 | `Requires Full Version of Destiny 2` |
+| 3837 | 169 | `Requires Destiny 2: Curse of Osiris` |
+| 4723 | 170 | `Requires Destiny 2: Warmind` |
+| 6038 | 173 | `Requires Destiny 2: Forsaken` |
+| 9395 | 238 | none; gates Shadowkeep content (assumed) |
+
+A blanket fill of the account's entitlement bank is wrong. It claims every platform at once and sets
+index 12, which is a restriction, not an entitlement.
+
+### Value slots need a descriptor
+
+A value slot is read through a descriptor table of 13,231 eight-byte rows: a name hash, a kind
+byte, a flags byte and a `u16` backing index. A second array holds the slot indices sorted by name
+hash, for lookup by name. The integer reader accepts value indices below 15500, then computes a row
+address without a bound. The 2269 buffer positions after the installed rows have no descriptor.
+Adding a value means appending a descriptor and keeping the sorted index.
 
 ### The expression format
 
-An expression record is `{u32 count; ...; i64 offset}`. Its instructions are 8 bytes each: the
-opcode byte at `+0` and a u16 operand at `+4`. The evaluator is a stack machine.
-
-| opcode | meaning | opcode | meaning |
-|---:|---|---:|---|
-| 1 | push a flag | 13 | `a > b` |
-| 2 | NOT | 14 | `a >= b` |
-| 3 | OR | 15 | `a < b` |
-| 4 | AND | 16 | `a <= b` |
-| 5 | NOR | 17 | `a + b` |
-| 6, 9 | not equal | 18 | `a - b` |
-| 7 | NAND | 19 | `a * b` |
-| 8 | equal | 20 | `a / b` |
-| 10 | push a value | 21 | `a % b` |
-| 11 | push a constant | 24 | FNV-1 combine |
-| 12 | evaluate a shared-pool row | 25, 26, 27 | `&`, `\|`, `^` |
-
-The signedness and divide-by-zero behavior of opcodes 20 and 21 are not verified.
-
-```c
-bool unlock_eval(const EvalState *s, const ExprRecord *e)
-{
-    if (!e || e->count == 0)
-        return true;                 /* callers treat "no expression" as a pass */
-    int64_t stack[64];
-    int sp = 0;
-    const Instr *ins = expr_instructions(e);
-    for (uint32_t i = 0; i < e->count; i++) {
-        switch (ins[i].op) {
-        case 1:  stack[sp++] = s->flags[(int16_t)ins[i].operand] == 2; break;
-        case 10: stack[sp++] = s->values[(int16_t)ins[i].operand];     break;
-        case 11: stack[sp++] = ins[i].operand;                         break;
-        case 12: stack[sp++] = pool_eval(s, ins[i].operand);           break; /* raw result */
-        case 2:  stack[sp - 1] = !stack[sp - 1];                       break;
-        default: sp--; stack[sp - 1] = binary_op(ins[i].op, stack[sp - 1], stack[sp]); break;
-        }
-    }
-    return sp == 1 && stack[0] != 0;
-}
-```
-
-The shared pool holds numeric helpers, not only gates. Opcode 12 pushes the pooled row's number,
-and the enclosing expression decides what it means.
+The expression format and its evaluator are on
+[Behaviors](/docs/destiny-2/behaviors/#unlock-expressions).
 
 ## The gameplay-switch table
 

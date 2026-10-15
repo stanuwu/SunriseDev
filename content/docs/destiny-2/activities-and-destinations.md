@@ -1,7 +1,7 @@
 ---
 title: "Activities and destinations"
-date: 2026-09-28
-description: "The activity and destination tables, how the client loads a level and picks a spawn point, and how a mission is authored."
+date: 2026-10-15
+description: "The activity and destination tables, how the client loads a level and picks a spawn point, how a mission is authored, public regions and waypoints."
 weight: 40
 ---
 An activity is one playable thing: a mission, a patrol zone, the Tower, a raid. A destination is the
@@ -64,10 +64,10 @@ struct ActivityRecord {                 /* variable length, at least 320 bytes *
 
 Notes:
 
-- The destination link is one byte at `+0x0E0`. A search for a 16-bit field misses it.
+- The destination link is one byte at `+0x0E0`, not a 16-bit field.
 - Power follows the item power curve: `requiredPower = max(requiredLevel * 10, 750)`. It holds on all
   700 rows that set a requirement. So an activity's power compares directly with a character's.
-- Type 7 is `Raid` and type 46 is `Dungeon`, read from both the activity rows and the type table.
+- Type 7 is `Raid` and type 46 is `Dungeon`. The activity rows and the type table agree.
 - There is no fireteam size field. The size is a display string on the activity type row.
 - Entering an activity writes unlock flags. Every value in the write list is 2, which is "true".
 
@@ -134,7 +134,26 @@ Several gates exist. None of them blocks a launch in this build.
 | type strings | activity type row | display text only |
 
 The requirement-group selector returns a message index, not a verdict. `-1` means nothing failed.
-All callers are UI components.
+All callers are UI components. A content bypass in the account objects can short-circuit it to
+"nothing failed" before any expression runs.
+
+The 29 requirement groups are mostly flag pairs. The `NOT FLAG(19xx)` pairs are pre-release locks
+that read false on a clean account. One group per expansion asks for full-version and expansion
+ownership; group `3D1F1FF1` is Shadowkeep. Value tests also appear: group `E4EC2422` asks for
+character power of at least 799, group `CB3928C9` gates The Menagerie on a value slot. The message
+each group selects is described on
+[Collections, vendors and other catalogs](/docs/destiny-2/content-catalogs/#lock-and-restriction-messages).
+
+The release rows are 246 unlock expressions over 138 activities. Every one leads with a release-band
+flag, slots 16840 to 16892. None of those slots has a backing byte in any object, so only the
+account's override list can set them. What a release row gates is unverified, because its reader
+is not traced. Three raid and dungeon rows add a per-character `NOT FLAG`: Pit of Heresy, Prophecy
+and Garden of Salvation. That shape is assumed to be a completion lockout.
+
+The fireteam size is a requirement line on the activity type row: a string pair plus an expression
+that decides whether the line shows. `Raid` line 0 reads `Fireteam: 6 Players`, `Dungeon` line 0
+`Fireteam: 1-3 Players`. No numeric size exists in the catalog. Weekly lockout is not in the catalog
+either; it is server state.
 
 The expression format is on [Items, characters and inventory](/docs/destiny-2/investment-data/#unlock-flags-and-the-evaluator).
 
@@ -142,12 +161,13 @@ The expression format is on [Items, characters and inventory](/docs/destiny-2/in
 
 ### The activity root
 
-Each activity has a root tag of class `0x80808AAE`, exactly `0x48` bytes. Two fields matter:
+Each activity has a root tag of class `0x80808AAE`, exactly `0x48` bytes. The install holds 468.
+Two fields matter:
 
 | field | target |
 |---:|---|
 | `+0x40` | the scenario tag, class `0x80809994` |
-| `+0x44` | a `0x30`-byte tag, class `0x80809BA3`; meaning unknown |
+| `+0x44` | a `0x30`-byte tag, class `0x80809BA3`; a transition descriptor, contents not decoded |
 
 The client also finds tags by name. It builds names from the activity's internal name and a fixed
 suffix list, then looks the name up as a named tag.
@@ -160,8 +180,12 @@ suffix list, then looks the name up as a named tag.
 | `:spaceflight_in`, `_filler`, `_out` | travel sequences |
 | `:same_dest_in`, `_filler`, `_out` | travel inside one destination |
 | `:no_ship_in`, `_filler`, `_out` | travel without the ship |
+| `:root` | built as `map:<name>:root`, the map root, not `<activity>:root` |
 
 For example, `city_tower_social_d2:scenario_client` is the Tower's scenario tag.
+
+Not every suffix ships. Which ones do is on
+[Packages](/docs/destiny-2/packages/#what-the-families-hold).
 
 ### Bubbles in the scenario
 
@@ -212,7 +236,8 @@ When the activity starts, the server sends one state byte per bubble. Only two v
 | 0 | registers the bubble's first state and adds the bubble |
 | -1 | skips the bubble |
 
-State 0 is refused when the bubble has no states. So the rule per bubble is
+The client refuses any other value with a `slice-set state` error. It also refuses 0 when the
+bubble has no states. So the rule per bubble is
 `state = (stateCount > 0) ? 0 : -1`. That is also the client's own default. For the Tower the eight
 values are `0 0 0 0 -1 -1 0 0`.
 
@@ -222,8 +247,11 @@ A bubble also has a number on its map, separate from its ordinal in the scenario
 one map can give the same bubble different ordinals. The slice-set state record carries the map
 number at `+0x1C`.
 
-A map root tag lists one record per bubble. Each record names a list of containers. A container
-carries a 32-byte bit mask, one bit per map bubble, and a list of member tags:
+A map root tag lists one record per bubble. It names them by 64-bit name hash, not by tag, so a
+walk must resolve them through the
+[name hash table](/docs/destiny-2/packages/#the-64-bit-name-hash-table). Each record names a list
+of containers. A container carries a 32-byte bit mask, one bit per map bubble, and a list of member
+tags:
 
 ```c
 struct Container {                      /* header, class 0x80808A54 */
@@ -234,9 +262,12 @@ struct Container {                      /* header, class 0x80808A54 */
 };
 ```
 
-The mask decides in which bubbles the container's members load. The client code that tests the mask
-is unknown, so this rule is not verified in code. It comes from the data: two tag classes agree on
-the numbering in every map measured.
+The mask decides in which bubbles the container's members load. A mission's bubble loads every map
+container whose mask meets the bubble row's own 256-bit mask. That bubble mask also covers the
+shared and environment cells, so the atmosphere and time-of-day layers load with the mission.
+
+The client code that tests a container's own mask is not identified, so the spawn binding below is
+unverified in code. Two tag classes agree on the numbering in every map checked.
 
 ## Spawn selection
 
@@ -361,7 +392,7 @@ struct ScenarioObject {                 /* header */
     uint32_t mapNameHash;               /* +0x08  FNV-1 of the map name; 0x29930BA4 is "edz" */
     uint32_t registryKey;               /* +0x0C  the key every slot reference uses */
     uint8_t  unmapped1[16];
-    uint64_t slotCount;                 /* +0x20  field width not verified */
+    uint64_t slotCount;                 /* +0x20  field width unverified */
     int64_t  slotHeader;                /* +0x28  relative, from +0x28, to a 16-byte header */
 };
 
@@ -418,11 +449,11 @@ struct DialogueLine {                   /* 72 bytes, class 0x80808D23 */
     uint8_t  unmapped0[8];
     uint32_t cueHash;                   /* +0x08 */
     uint8_t  unmapped1[8];
-    float    pauseBefore;               /* +0x14  not verified */
+    float    pauseBefore;               /* +0x14  unverified */
     uint8_t  unmapped2[8];
     uint32_t stringContainer;           /* +0x20  localized string container */
     uint32_t stringHash;                /* +0x24 */
-    float    duration;                  /* +0x28  matches the spoken length; not verified */
+    float    duration;                  /* +0x28  matches the spoken length; unverified */
     uint8_t  unmapped3[20];
     uint32_t speakerHash;               /* +0x40 */
     uint8_t  unmapped4[4];
@@ -434,7 +465,7 @@ references, so the mission's text is package data.
 
 ### Walking a step chain
 
-The start and end rules below are not verified. They are inferred from the behavior of one mission.
+The start and end rules below are assumed. They match the behavior of one mission.
 
 ```c
 /* Steps are read in the order of their directives' text. */
@@ -493,13 +524,13 @@ two states:
 
 Every observable in the berth maps to a named slot: squads, doors, levers, the directive, dialogue
 and music. The order of the lever puzzle is not on the client. Only 27 slot-to-slot references exist
-in all of Leviathan, and 26 of them point at a trigger volume. The extraction behind that count
-models only references to trigger volumes, so it cannot show other edges. The behavior programs and
-slot types also carry no mission state.
+in all of Leviathan, and 26 of them point at a trigger volume. That count covers only references to
+trigger volumes, so other edges may exist. The behavior programs and slot types also carry no
+mission state.
 
 The extra cutscene state is a pattern across the install. All 90 extra state rows carry the same
 marker flags, and 88 of them hold a cinematic slot. The flags' reader is unknown, so the marker's
-meaning is not verified.
+meaning is unverified.
 
 ## The Director's activity graphs
 
@@ -526,7 +557,7 @@ struct ActivityGraph {                  /* 152 bytes fixed, class 0x80805E79 */
 ```
 
 The member names `display_progressions`, `display_objectives`, `linked_graphs`, `nodes`,
-`connections` and `art_elements` are Bungie's. They are recovered from FNV-1 hashes.
+`connections` and `art_elements` are Bungie's. They match the FNV-1 hashes in the data.
 
 - A `nodes` row holds the activities a destination's own map page offers.
 - A `linked_graphs` row is one tile on a page. Only the top-level solar-system page has a full list,
@@ -567,7 +598,112 @@ Most tiles have one ungated candidate: the destination's map page. Two tiles car
   only while two flags are set. With those flags false it takes the map page.
 
 The tile row also has its own display expression, which decides whether the tile is drawn at all.
-Seven patrol tiles share one account flag in that expression. The flag's name is unknown.
+Seven patrol tiles share one account flag in that expression, slot 1063, beside a second flag, slot
+1087, read under `NOT`. Their names are unknown. Slot 1063 also feeds map-node placements and some
+vendor rows, so setting it has effects beyond the tiles. The display expression only sets one bit of
+the tile. Whether the tile is present at all depends on its graph and row resolving.
+
+## Public and private regions
+
+A destination is split into regions. A private region belongs to one fireteam. A public region, such
+as a patrol space or a strike, is shared with players the matchmaker finds. Whether a region is
+public is package content, read when a slice-set transition starts.
+
+### The transition stages
+
+A slice-set transition runs as a bit mask of eight stages. The stage names are the game's own.
+
+| bit | stage | name |
+|---|---:|---|
+| `0x01` | 0 | `de-instantiating` |
+| `0x02` | 1 | `synchronizing` |
+| `0x04` | 2 | `pre-caching` |
+| `0x08` | 3 | `matchmaking GS` |
+| `0x10` | 4 | `citizen joining GS` |
+| `0x20` | 5 | `starting public AH` |
+| `0x40` | 6 | `joining public AH` |
+| `0x80` | 7 | `switching` |
+
+Stages 5 and 6 run the same function. It creates the public activity session and waits for it.
+
+The transition also keeps a simulated phase: `idle`, `hysteresis`, `matchmaking`,
+`matchmaking-abort`, `switching` and `switched`, numbered 0 to 5. While a transition runs, the phase
+is 2, 3 or 4.
+
+### The region session state
+
+The transition manager holds two region records, `CURRENT` and `PENDING`. Each has a session state:
+0 `disc`, 1 `ctng`, 2 `cntd`.
+
+A private region passes on its first test and never needs the pending state. A public region needs
+the pending state to be `cntd` before it can switch. Exactly one place in the client writes `cntd`
+for the pending region, with the reason text `public AH instance ready`. It runs only when the
+public activity session reaches status 6.
+
+### The three activity-session slots
+
+The client keeps three activity-session slots:
+
+| slot | name |
+|---:|---|
+| 0 | PRIVATE CURRENT |
+| 1 | PUBLIC CURRENT |
+| 2 | PUBLIC TARGET |
+
+The public route hangs on slot 2. A slot climbs a status ladder. The status names are the client's
+own.
+
+| status | name | what moves it on |
+|---:|---|---|
+| -1 | `NONE` | a public slot is created only once slot 0 is at 6 |
+| 1 | `startup_setting_parameters` | the group session reaches state 4 to 9; after 1000 ms the slot fails with `timed_out_waiting_for_session_stabilization` |
+| 2 | `startup_preparing_to_create_client` | nothing |
+| 3 | `startup_creating_client` | an activity client exists and the BAP link is up |
+| 4 | `startup_requesting_host` | activity message 10 arrives |
+| 5 | `startup_establishing_client` | message 4 is accepted, then message 0 |
+| 6 | `ok` | -- |
+| 7, 8 | `shutting_down`, `disposing` | teardown |
+| 9 and up | errors | terminal |
+
+The group-session gate at status 1 is the one that matters on the public route. A public slot joins
+group 2's target session, and the client never hosts that session itself. It reaches the state range
+only by joining a session another machine hosts.
+
+### A public session runs the destination's free-roam activity
+
+The public session does not run the mission. It runs the destination's free-roam activity. A mission
+in the EDZ runs on the private session, and the public regions run `edz_freeroam`. Every free-roam
+activity carries template hash `0x0109ED6B` at activity record `+220`. The public session takes the
+lowest-index named row with that template on the same destination.
+
+| destination | free-roam rows |
+|---|---|
+| 9, EDZ | 8 `edz_freeroam` |
+| 10 | 10 `fleet_freeroam`, 605 `rally_terminal` |
+| 18 | 42 `dreaming_city_freeroam`, 43 unnamed |
+| 20 | 40 `tangled_shore_freeroam`, 41 `tangled_shore_reveal_freeroam` |
+| 28 | 414 `pandora_quests`; 413 `pandora_freeroam` has a different template |
+
+A destination with no free-roam row keeps the source activity.
+
+## Waypoints in the world
+
+The in-world waypoint is driven by live marker objects, not by the Director. The Director's
+`Add Waypoint` and `Remove Waypoint` buttons change which existing marker may become the extra
+tracked marker. They do not create a marker.
+
+- Activity and world objects register markers with a marker manager. The HUD list holds at most 16.
+  Slot type 68's Auth registers up to 13 of them.
+- A marker is skipped when it is disabled, its position is not finite, its W lane is not 1.0, or its
+  position is the zero sentinel.
+- The client picks the nearest eligible candidate as the selected tracker. It passes the target
+  bubble, the target position and the player position to a route request.
+- The client generates the route itself. The solver maps the target bubble to a slice set, searches
+  route topology loaded from packages, and also builds a 96-node graph from slot type 19's Auth.
+- If no topology is registered, there is no waypoint. If topology exists but no route is found, the
+  waypoint is the target position itself.
+
+Which inbound activity message creates the selected marker for a Director choice is unverified.
 
 ### A scenario's selection graph
 
@@ -585,6 +721,7 @@ Forest (activity 79).
 - the client code that tests a container's bubble mask
 - what pulls in an activity package that no scenario names
 - what the release rows at activity `+0x0A0` gate
+- what the Director toggle writes to make a marker eligible
 - a client reader of proxy slots
 - the meaning of the extra cutscene state's marker flags
 - the meaning of a selection graph's native state values

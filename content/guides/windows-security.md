@@ -1,15 +1,15 @@
 ---
 title: "Windows Defender and Smart App Control"
-date: 2026-09-16
+date: 2026-10-15
 description: "Stop Windows from flagging or blocking the game, on Windows 10 and 11."
 weight: 20
 ---
 
 Windows can flag or block Sunrise:
 
-- **Windows Defender** can flag the mod as a threat. See
+- Windows Defender can flag the mod as a threat. See
   [why antivirus tools flag it](/faq/#why-does-my-antivirus-flag-this-file).
-- **Smart App Control** can block the game with the error `Bad Image (status 0xc0e90002)`.
+- Smart App Control can block the game with the error `Bad Image (status 0xc0e90002)`.
 
 ## Windows Defender
 
@@ -44,7 +44,7 @@ Smart App Control has no exclusions. It is either on or off, so to run Sunrise y
 3. Under **Smart App Control**, select **Smart App Control settings**.
 4. Select **Off**.
 
-> On some Windows 11 versions, you cannot turn Smart App Control back on without reinstalling
-> Windows. Read the note on the settings page before you turn it off.
+On some Windows 11 versions, you cannot turn Smart App Control back on without reinstalling
+Windows. Read the note on the settings page before you turn it off.
 
 If the settings page already shows **Off**, Smart App Control is not the cause.

@@ -53,14 +53,29 @@
 .docs-sidebar::-webkit-scrollbar-track { background:transparent; }
 .docs-sidebar::-webkit-scrollbar-thumb { background:rgba(255,255,255,.18); border-radius:2px; }
 .docs-sidebar:hover::-webkit-scrollbar-thumb { background:rgba(255,255,255,.32); }
-.docs-category { margin-bottom:26px; }
+.docs-category { margin-bottom:18px; }
 .docs-category-name {
   display:block; margin-bottom:8px;
-  font:700 11px "Space Grotesk", sans-serif; text-transform:uppercase;
-  letter-spacing:.08em; color:#767c86; transition:.2s;
+  font:700 12.5px "Space Grotesk", sans-serif; text-transform:uppercase;
+  letter-spacing:.06em; color:#c3c7cd; transition:.2s;
 }
 .docs-category-name:hover, .docs-category-name.active { color:var(--gold-bright); }
+/* The name links to the category page; the arrow and the rest of the row fold it. */
+.docs-category-head {
+  display:flex; align-items:center; gap:8px; margin-bottom:8px; cursor:pointer; list-style:none;
+}
+.docs-category-head::-webkit-details-marker { display:none; }
+.docs-category-head::before {
+  content:""; flex:none; width:5px; height:5px; margin:0 1px 2px;
+  border:solid #767c86; border-width:0 1.5px 1.5px 0; transform:rotate(-45deg); transition:.2s;
+}
+.docs-category-head:hover::before { border-color:var(--gold-bright); }
+.docs-category[open] > .docs-category-head::before { transform:rotate(45deg); }
+.docs-category-head .docs-category-name { margin-bottom:0; }
+.docs-category:not([open]) > .docs-category-head { margin-bottom:0; }
 .docs-nav-list { list-style:none; margin:0; padding:0; }
+.docs-nav-group .docs-nav-list { margin-left:12px; border-left:1px solid var(--line); }
+.docs-nav-group .docs-nav-item { margin-left:-1px; }
 .docs-nav-item {
   display:block; border-left:2px solid transparent; padding:7px 0 7px 12px;
   color:#a7acb4; font-size:13.5px;
@@ -68,6 +83,10 @@
 .docs-nav-item:hover { border-left-color:var(--line); color:#e6e8eb; }
 .docs-nav-item.active { border-left-color:var(--gold-bright); color:var(--gold-bright); font-weight:700; }
 .docs-nav-empty { color:#565b64; font-size:12px; padding:6px 0 6px 12px; }
+.docs-nav-group-name {
+  display:block; padding:12px 0 4px 12px; color:#767c86;
+  font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+}
 
 .docs-content { max-width:760px; min-width:0; }
 .docs-content .card-list { margin-top:32px; }

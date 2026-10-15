@@ -12,15 +12,35 @@
   </div>
   {{ end }}
   {{ range $section.Sections }}
-  <div class="docs-category">
-    <a class="docs-category-name{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .Title }}</a>
+  {{ $pages := .RegularPages }}
+  {{ $current := or ($page.Eq .) ($page.IsDescendant .) }}
+  <details class="docs-category"{{ if $current }} open{{ end }}>
+    <summary class="docs-category-head">
+      <a class="docs-category-name{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .Title }}</a>
+    </summary>
     <ul class="docs-nav-list">
-      {{ range .RegularPages }}
-      <li><a class="docs-nav-item{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+      {{ with .Params.groups }}
+        {{ range . }}
+          {{ $grouped := where $pages "Params.group" . }}
+          {{ if $grouped }}
+          <li class="docs-nav-group">
+            <span class="docs-nav-group-name">{{ . }}</span>
+            <ul class="docs-nav-list">
+              {{ range $grouped }}
+              <li><a class="docs-nav-item{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+              {{ end }}
+            </ul>
+          </li>
+          {{ end }}
+        {{ end }}
       {{ else }}
-      <li class="docs-nav-empty">No pages yet.</li>
+        {{ range $pages }}
+        <li><a class="docs-nav-item{{ if $page.Eq . }} active{{ end }}" href="{{ .RelPermalink }}">{{ .LinkTitle }}</a></li>
+        {{ else }}
+        <li class="docs-nav-empty">No pages yet.</li>
+        {{ end }}
       {{ end }}
     </ul>
-  </div>
+  </details>
   {{ end }}
 </aside>

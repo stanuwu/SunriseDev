@@ -1,6 +1,6 @@
 ---
 title: "Settings, logs and in-game tools"
-date: 2026-09-28
+date: 2026-10-15
 description: "The settings file, the log and its format, and the in-game menu."
 weight: 20
 ---
@@ -15,7 +15,7 @@ The file is `bin/x64/Sunrise/settings.json`. It sits in the `Sunrise` folder bes
   `resources/default_settings.json`, built into the DLL.
 - Sunrise reads it once, at startup. Restart the game after a change.
 - The file must be valid JSON and at most 1 MiB. A leading UTF-8 byte order mark is fine.
-- Unknown keys are skipped. Most known keys may appear only once; a repeat is an error.
+- Unknown keys are skipped. Most known keys may appear only once. A repeat is an error.
 - A key you leave out keeps its built-in default.
 
 If the file does not parse, Sunrise does not start. The reason goes to the debugger output as
@@ -34,7 +34,7 @@ The root `version` key is the layout version of the file. This build expects `18
 ```json
 {
   "version": 18,
-  "core":   { "logging": { ... }, "activity_sdk_generation": { ... } },
+  "core":   { "logging": { ... }, "activity_sdk_generation": { ... }, "studio_attach": false },
   "steam":  { "language": "...", "user": { ... } },
   "client": { "ui": { ... }, "external_server": { ... }, ... },
   "server": { "bap_port": 30974, "gameplay": { ... }, "activation": { ... } },
@@ -56,6 +56,14 @@ value, the table says so.
 | `core.logging.debugger_sink` | bool | `true` | sends each log line to the Windows debugger output |
 | `core.logging.levels.<channel>` | string | `"warn"` | the lowest level kept for that channel; see [Log levels](#log-levels) |
 | `core.activity_sdk_generation.lua_declarations` | bool | `true` | writes the `sdk/lua` tree that mission scripts use |
+| `core.studio_attach` | bool | `false` | lets Sunrise Studio attach to the running game |
+
+Studio attaches through shared memory in the Windows session namespace. Only a program in your own
+Windows session on this machine can reach it. There is no network path, so nothing remote can
+attach. With `studio_attach` off, Sunrise opens no Studio link and installs none of its hooks. With
+it on, Studio can read the camera, the world, placed objects, animation and the open CUI screens.
+It can also ask the game to reload a mod's mission scripts. See
+[The Sunrise Studio link](/docs/sunrise/architecture/#the-sunrise-studio-link).
 
 ### Steam
 
@@ -65,7 +73,10 @@ value, the table says so.
 | `steam.user.persona_name` | string | `"Player"` | your player name; 1 to 63 printable ASCII characters |
 
 The accepted languages are `english`, `french`, `german`, `italian`, `japanese`, `brazilian`,
-`spanish`, `russian`, `polish`, `schinese`, `tchinese`, `latam` and `koreana`.
+`spanish`, `russian`, `polish`, `schinese`, `tchinese`, `latam` and `koreana`. Any other value
+writes `ev=settings stage=language result=fallback` to the debugger output. The game files for a
+language come from its own Steam depot; see
+[Other languages](/guides/installing/#other-languages).
 
 ### Client
 
@@ -76,12 +87,27 @@ The accepted languages are `english`, `french`, `german`, `italian`, `japanese`,
 | `client.custom_bootflow_textures` | bool | `true` | replaces some startup screen textures with ones built into Sunrise |
 | `client.socket_menu_routing` | bool | `false` | moves four leg mods into the leg mod menu |
 | `client.reveal_lore_books` | bool | `true` | clears the visibility gates on lore book entries |
+| `client.cheats` | bool | `false` | unlocks the cheat tools; the session then saves no progress |
+| `client.dump_package_keys` | bool | `false` | exports the installed package keys for Sunrise Studio during startup |
 | `client.external_server.enabled` | bool | `false` | sends the game's traffic to another server instead of answering it in process |
 | `client.external_server.host` | string | `"127.0.0.1"` | that server's IPv4 address; a host name is refused |
 | `client.external_server.config_url` | string | `"https://127.0.0.1/config/"` | the config URL handed to the game; must be a route that server serves |
 | `client.external_server.config_guid` | string | `"d2legacy-0000-0000-0000-000000000001"` | the 36-character config id the game checks the config against |
 
 `toggle_key` accepts `insert`, `home`, `end`, `delete` and `f1` to `f12`.
+
+To prepare an install for Sunrise Studio, set `client.dump_package_keys` to `true` and start the
+game once. Sunrise writes `bin/x64/Sunrise/exports/package_keys.bin` after its package reader is
+ready. Studio reads that file from the selected install. Set the option back to `false` after the
+file appears. Leaving it on replaces the same file on each successful startup.
+
+The cheat tools are Teleport, Noclip, Fly and Sword Skate Fix on the Movement page, and Infinite
+Ammo on the Player page. With `cheats` off they are locked and read as off, whatever `movement.json`
+and `player.json` hold. With `cheats` on, the session plays on a copy of the save held in memory,
+the same as with a cheat mod, so nothing earned that session is kept. A notice at startup says so,
+and the Movement page says so above its tools. See
+[Cheat sessions](/docs/sunrise/save-data/#cheat-sessions). Anti AFK is not a cheat and stays
+unlocked.
 
 ### Server
 
@@ -194,7 +220,10 @@ There are four levels, from most to least severe: `error`, `warn`, `info`, `debu
 value, `off`, drops the channel.
 
 Each channel has its own threshold. A line is kept when its level is at or above the threshold.
-So `warn` keeps errors and warnings; `debug` keeps everything.
+So `warn` keeps errors and warnings, and `debug` keeps everything.
+
+An unknown channel name in `levels` is skipped. An unknown level name is a parse error, so Sunrise
+does not start.
 
 Every channel defaults to `warn`. This example turns on the file log, raises `server` to `info` and
 drops `middleware`:
@@ -235,12 +264,13 @@ The left column lists the pages, in this order: client pages, then server pages,
 
 | page | from | what it has |
 |---|---|---|
-| Movement | client | Teleport (distance and key), Noclip (toggle key), Fly (toggle key and speed), Sword Skate Fix |
-| Player | client | Infinite Ammo, Anti AFK |
+| Movement | client | Teleport (distance and key), Noclip (toggle key), Fly (toggle key and speed), Sword Skate Fix; all locked unless `client.cheats` is on |
+| Player | client | Infinite Ammo, locked unless `client.cheats` is on; Anti AFK |
 | Activity Launcher | client | browse activities by content (expansions, seasons, events), search, and launch from orbit; Custom Launch picks the arrival by hand |
 | Activity Host | server | an instance selector and two windows, World and Packets |
 | HUD | Core | one switch per overlay, and one per line of the Current Status overlay |
 | Logs | Core | recent log lines, with channel, level and text filters, auto-scroll and Copy Visible |
+| Mods | Core | every mod folder: loaded mods in load order, then refused ones with each reason ([Mods](/docs/sunrise/mods/)) |
 
 Changes on the Movement, Player and HUD pages save at once and survive a restart.
 

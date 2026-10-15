@@ -1,6 +1,6 @@
 ---
 title: "Quick reference"
-date: 2026-09-17
+date: 2026-10-15
 description: "The program skeleton, the calls you need most, and where every file lives."
 weight: 120
 ---
@@ -32,12 +32,17 @@ Every entry is optional. See [How a script runs](/docs/mission-scripting/program
 | remember a value | `context:set_variable(name, value)` / `state:variable(name)` |
 | wait | `context:start_timer(name, ms)` |
 | spawn enemies | `context:squad(Squad.X):place{}` |
+| spawn placed objects | `context:activate_objects{slots = {Slot.O_X, Slot.O_Y}, active = true}` |
 | open a door | `context:slot(Slot.D_X):transition{transition = context.sdk.device_transitions.open}` |
 | show a goal | `context:slot(Slot.M_DIRECTIVE_SENSOR_X):set_directive{directive = mission.Directive.X}` |
+| show a goal counter | the same, with `progress = {current, maximum}` on a directive with `counter = true` |
 | play a line | `context:slot(Slot.M_DIALOG_SENSOR_X):play_dialogue_cue{cue = n}` |
 | watch a trigger | `context:slot(Slot.PT_X):fire_trigger()` then `on_event_player_trigger` |
 | check a clear | `context:cohort{squads = {...}}.cleared` |
 | change area | `context:select_state(mission.states.STATE_X)` |
+| start a scene | `context:scene(Scene.X):activate{}` |
+| fire a scene input | `context:scene(Scene.X):send_event{key = mission.SceneInput.X.NAME}` |
+| wait for a scene output | `on_event_scene_output`, compare `event.key` with `mission.SceneOutput.X.NAME` |
 | finish | `context:complete_mission{}` |
 
 The full list is in the [Lua API reference](/docs/mission-scripting/lua-api/). For worked examples,
@@ -50,6 +55,7 @@ Paths are inside your game install.
 | thing | place |
 |---|---|
 | your scripts | `bin/x64/Sunrise/scripts/<name>/<name>.lua` |
+| a mod's scripts | `bin/x64/Sunrise/mods/<mod>/scripts/<name>/<name>.lua`; they replace the base script |
 | shared helpers | `bin/x64/Sunrise/scripts/lib/` |
 | generated SDK | `bin/x64/Sunrise/sdk/lua/` |
 | log | `bin/x64/Sunrise/logs/sunrise.log` |

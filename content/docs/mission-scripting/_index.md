@@ -5,15 +5,17 @@ weight: 10
 ---
 
 ### Warning
-> Sunrise is WIP. The scripting SDK and API are not fully complete. Things may be missing or non functional.
+> Sunrise is a work in progress. The scripting SDK and API are not complete. Some parts may be missing or may not work.
 
 A mission script is a Lua file that runs on the local server while an activity is live. It reacts
 to what the game client reports, and it asks the client to do things: spawn enemies, open doors,
 show goals, play lines. Sunrise does the networking, counting and bookkeeping. The script only
 decides what should happen.
 
-Your scripts live in `Sunrise/scripts/<name>/<name>.lua` next to the game. Start with
-[Your first script](/docs/mission-scripting/first-script/).
+Your scripts live in `Sunrise/scripts/<name>/<name>.lua` in your game install. A
+[mod](/docs/sunrise/mods/) can ship scripts too, and its script replaces the base one. The scripts
+that ship with Sunrise, and the shared libraries in `Sunrise/scripts/lib/`, are working examples.
+Start with [Your first script](/docs/mission-scripting/first-script/).
 
 These pages use a few conventions:
 

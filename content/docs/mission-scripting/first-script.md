@@ -1,6 +1,6 @@
 ---
 title: "Your first script"
-date: 2026-09-17
+date: 2026-10-15
 description: "From an empty folder to a running, reloadable mission script."
 weight: 10
 ---
@@ -22,7 +22,8 @@ open while you work.
 
 ## Step 1: turn on the script log
 
-By default Sunrise writes no log file and shows only warnings. Script lines are at debug level.
+By default Sunrise writes no log file and keeps only warnings. Most script lines are at info or
+debug level.
 
 Open `Sunrise/settings.json` and change only these two values:
 
@@ -37,8 +38,8 @@ Open `Sunrise/settings.json` and change only these two values:
 }
 ```
 
-Keep the rest of the file as it is. Restart the game. The log now goes to
-`Sunrise/logs/sunrise.log`, and the previous run is kept as `sunrise.log.old`.
+Keep the rest of the file as it is. Restart the game. The log then goes to
+`Sunrise/logs/sunrise.log`. The log of the previous game start is kept as `sunrise.log.old`.
 
 Mission scripting itself is on by default. It is `server.activation.mission_scripting`.
 
@@ -63,16 +64,16 @@ To use another key, set `client.ui.toggle_key` in `settings.json`. It accepts `i
 3. Open "Activity information". It shows the package name, for example `adventure_ginger`.
 
 The script file is named after the activity's internal name. That is usually the package name. The
-`name` field of the activity module in `Sunrise/sdk/lua/activities/` holds the same name the
-runtime uses, before it is folded to lower case with `_` for other characters.
+`name` field of the activity module in `Sunrise/sdk/lua/activities/` holds that name. The runtime
+folds it to lower case. Each run of other characters becomes one `_`.
 
 ```
 Sunrise/scripts/<name>/<name>.lua
 ```
 
 For `adventure_ginger` that is `Sunrise/scripts/adventure_ginger/adventure_ginger.lua`. The exact
-rule is in [How a script runs](/docs/mission-scripting/program-model/). Once the activity runs, the "Script" page shows the path it
-looks for. Step 6 shows where.
+rule is in [The script file name](/docs/mission-scripting/program-model/#the-script-file-name).
+Once the activity runs, the "Script" page shows the path it looks for. Step 6 shows where.
 
 If a script already exists for your activity, copy the folder away first, or pick another activity.
 
@@ -118,13 +119,14 @@ What it does:
 - `on_start` stores a variable. Variables are how a script remembers things.
 - `on_event_region_changed` counts region changes.
 
-The script sends nothing to the game yet. That is on purpose: first check that it loads.
+The script sends nothing to the game yet. First check that it loads.
 
 ## Step 6: run it
 
 1. Go to orbit.
-2. Launch your activity normally or In **Activity Launcher**, open your activity and press **Launch activity**.
-3. When you have landed, open **Activity Host**, tick **World**. A window opens.
+2. Launch your activity the normal way. Or open it in **Activity Launcher** and press
+   **Launch activity**.
+3. When you have landed, open **Activity Host** and tick **World**. A window opens.
 4. In that window, pick the **Script** page.
 
 The Script page shows:
@@ -147,8 +149,10 @@ script, its phase, its file and its last error, on screen at all times.
 1. Edit the file and save it.
 2. On the **Script** page, press **Reload script**.
 
-The runtime closes the script and opens it again. Your variables stay. Because the mission already
-started, `on_load` runs instead of `on_start`. Add one when you need it:
+The button reloads every running script. The runtime opens the new script next to the old one,
+then swaps them at a safe point. Your variables stay. The mission has already started, so `on_load` runs instead of `on_start`. If the
+new script fails, the old one keeps running. The button shows the error. Add an `on_load` when you
+need it:
 
 ```lua
 on_load = function(context, state)
@@ -178,15 +182,13 @@ The names above are placeholders. Search the module for `M_DIRECTIVE_SENSOR` and
 
 ## When it does not work
 
-| what you see | what to check |
-|---|---|
-| `open no_script` in the log | the folder or file name is wrong |
-| `open compile_error` | a Lua syntax error; the log line has the text |
-| `open runtime_error` | the top-level code failed, often a bad `require` name |
-| `open invalid_program` | the file did not return a table, or an entry is not a function |
-| `Program ... faulted` | a callback failed; the Error line has the text |
+Find the `ev=mission_script stage=open` line in the log. `result=ready` means the script started.
+Any other result names the problem, and `error=` holds the Lua message.
+[Stages you will see](/docs/mission-scripting/debugging/#stages-you-will-see) lists every result.
+The most common one is `no_script`: the folder or file name is wrong.
 
-More in [Debugging a script](/docs/mission-scripting/debugging/).
+An `open` error or a failed `on_start` stops the mission before it starts. **Reload script** cannot
+restart it. Fix the file, then leave the activity and launch it again.
 
 ## Next
 

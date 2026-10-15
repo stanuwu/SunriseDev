@@ -1,6 +1,6 @@
 ---
 title: "Tags, classes and definitions"
-date: 2026-09-28
+date: 2026-10-15
 description: "Tag hashes, tag classes, the definition registry, field descriptors and the bit-packed codec."
 weight: 20
 ---
@@ -125,8 +125,10 @@ uint32_t fnv1(const char* s) {
 | `investment_globals` | `0x6F7125CB` | `0x81A2926E` |
 | `player_globals` | `0x3BAAD9FB` | `0x80B9E5C4` |
 
-The client's name index maps these hashes to tags. See
-[Packages](/docs/destiny-2/packages/#the-clients-own-name-lookup).
+The client's name index maps `player_globals` to its tag. See
+[Packages](/docs/destiny-2/packages/#the-clients-own-name-lookup). The executable also holds the
+`investment_globals` hash, but that hash is in none of the parsed name index tags. The name is in a
+package named-tag table. Which lookup the client uses for it is unverified.
 
 `0x811C9DC5` in a hash field means "no string". It is the basis with nothing hashed. The name
 lookup returns "not found" for it at once.
@@ -154,6 +156,12 @@ it to a package reader.
 
 Handle `0x80800000` itself is table 0, index 0. The loader binds the root of the current definition
 file there.
+
+The same value is also a package class. 129 package entries in 23 packages carry class
+`0x80800000`, all of file type 8. The executable holds the string `bungiescript` next to this
+value, but the link from that name to the class is unverified. No reader of these entries and no
+script interpreter is known in the client. So a bare
+`0x80800000` proves nothing on its own.
 
 Example: the Investment root definition is handle `0x80808699`, table 4, index 1689.
 
@@ -224,7 +232,7 @@ Only the cursor entry of each group is tested, and cursors only move forward. So
 arrive sorted by hash. A tool that replays definitions must keep that order.
 
 The definition hash is not a hash of any string found in the executable. Whether it matches a
-public manifest hash is not verified.
+public manifest hash is unverified.
 
 ## Definition records
 
@@ -378,8 +386,8 @@ void walk(handle def, uint8_t* obj, BitStream* bs) {
 ```
 
 This is a sketch of the order, not a copy of the client's code. The client's walker is iterative.
-Read it as "which bits come out, in which order". A dynamic count writes only that many elements;
-the element and its size come from the nested definition, one level down.
+Read it as "which bits come out, in which order". A dynamic count writes only that many elements.
+The element and its size come from the nested definition, one level down.
 
 A common array shape: a type-5 count at byte offset 0, then a type-1 field with `params[0] = 1` and
 `params[1] = 0`. The count's bit width is sized to the capacity, so it hints at the maximum length.
@@ -468,7 +476,7 @@ bits per field and breaks the rest of the stream.
 
 In the simulation mode, a tag reference is first replaced by a stable 32-bit id read from the
 client's definition table. So a decoder needs those tables to interpret a reference field. Whether
-the Investment mode does the same remap before its 17-bit form is not verified.
+the Investment mode does the same remap before its 17-bit form is unverified.
 
 ### Real numbers
 

@@ -17,6 +17,6 @@ Conventions:
   of its names.
 - Offsets are in hex. Sizes are in bytes unless a page says bits.
 - Data layouts are C-like structs. Logic is C-like pseudocode.
-- A fact that is not proven is marked "not verified" or "unknown".
+- A fact that is not proven is marked "unverified" or "unknown".
 
 For how Sunrise answers the game, see [Sunrise](/docs/sunrise/).

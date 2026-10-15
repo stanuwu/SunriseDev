@@ -1,6 +1,6 @@
 ---
 title: "The Activity Host"
-date: 2026-09-28
+date: 2026-10-15
 description: "How Sunrise loads the client into a destination and serves the activity link after that."
 weight: 50
 ---
@@ -76,7 +76,7 @@ The client refuses a body of any other size.
 ### Service 6 and 7
 
 Service 6 carries the client's destination pick. Sunrise reads the destination out of it, prepares
-a session in State, and answers. A malformed request still gets an answer: Sunrise falls back to a
+a session in State, and answers. A malformed request still gets an answer. Sunrise falls back to a
 default selection, because a missing reply would stall the client's request queue. See
 `src/server/bap/encrypted/activity_host_manager/activity_host_manager_route.cpp`.
 
@@ -168,7 +168,7 @@ maps each message id to its handler. The handlers are in
 |---:|---|---|---|
 | 3 | `join_request` | request | sends the join burst |
 | 18 | state refresh | request | sends the whole snapshot: messages 1, 2, 12 (private link), then 5 |
-| 11 | `start_new_activity` | request | the same snapshot if a server setting enables it; else recorded only |
+| 11 | `start_new_activity` | request | the same snapshot; with `server.activation.default_client_activation` off, recorded only |
 | 20 | entity slot request | request | grants free slots with message 0 |
 | 21 | entity slots | report | releases the returned slots; no reply |
 | 22 | client authoritative data | report | commits region, spawn and teleport state; see below |
@@ -176,9 +176,15 @@ maps each message id to its handler. The handlers are in
 | 38 | membership acknowledgement | report | records the acknowledged revision; no reply |
 | 52 | patch epoch | report | sends message 5 if a roster is owed for that epoch |
 | 15 | peer leave | report | sends the message 5 leave delta |
+| 27 | authority purge request | request | answers with a purge notice that keeps the client's mask and reason |
+| 29 | authority reset acknowledgement | report | records the answer to the host's message 28 |
+| 31, 32 | authority query answer | report | records the answer to the host's message 30 |
+| 33 | authority abdication | report | releases authority over the named entities |
 | 6 | `sensor_sense_update` | report | decoded and passed to the host runtime |
 | 19 | incident | report | decoded and passed to the host runtime |
 | 16 | keepalive request | report | recorded only |
+
+Every other client message in the route table is recorded only. It gets no reply.
 
 On a private link, message 22 also sends message 12 if membership changed, and message 5 if the
 region moved.
@@ -299,7 +305,7 @@ fixed order, in `src/server/runtime/server_runtime.cpp`:
 |---:|---|---|
 | 1 | transport | reads client frames and stages answers and pushes |
 | 2 | host | applies queued reports and turns them into events |
-| 3 | mission | runs script callbacks on new events and timers |
+| 3 | mission | serves the Studio command link, runs script callbacks on new events and timers, and swaps in reloaded scripts |
 | 4 | gameplay | the gameplay services |
 
 The loop from a report to a request:
@@ -320,6 +326,13 @@ transport:  if (host_output_pending())
 The script never sees packet bytes. It sees typed events, and it asks for typed changes. The
 mission runtime is in `src/server/activity/mission/`. How to write a script is in
 [Mission Scripting](/docs/mission-scripting/).
+
+A script reload swaps a running program without a restart. The mission stage holds one request at a
+time. A newer request replaces an unanswered one. The stage compiles the new script first, waits until the
+program has no request, report, timer or event in flight, then swaps it in with its saved variables
+and timers. A script that does not compile leaves the old one running. Only a started mission can
+reload. The request comes from the **Reload script** button or from the
+[Sunrise Studio link](/docs/sunrise/architecture/#the-sunrise-studio-link).
 
 ## Related pages
 

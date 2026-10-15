@@ -1,6 +1,6 @@
 ---
 title: "Bootflow"
-date: 2026-09-28
+date: 2026-10-15
 description: "The client's boot state machine: its 79 steps, how a step runs, and how it fails."
 weight: 70
 ---
@@ -17,12 +17,12 @@ Sunrise answers at each step, see [From launch to orbit](/docs/sunrise/boot-and-
 The step names sit in one table of 79 string pointers, indexes 0 to 78, ended by a null. The
 table lists the boot sequence in order.
 
-The table looks like several name lists joined together. The split below is not verified:
+The table looks like several name lists joined together. The split below is unverified:
 
 | indexes | group |
 |---|---|
 | 0 to 49 | bootflow, setup, activity and bubble-host steps |
-| 50 to 57 | transitioning states |
+| 50 to 57 | `idle`, then the transitioning states |
 | 58 to 70 | error states |
 | 71 to 78 | Activity Host state names, not bootflow steps |
 
@@ -47,7 +47,7 @@ waits on is not.
 | 16 | `bootflow:content_check` | installed content; one DLC wait fails after 2 s |
 | 21 | `bootflow:package_registration` | not read |
 | 22 | `bootflow:bap_signin` | 19 tasks; two are package loads (patchable bootstrap, investment globals) |
-| 23 | `bootflow:investment_signin` | six tasks; the last waits for the account's investment data |
+| 23 | `bootflow:investment_signin` | six tasks; task 0 finishes last and waits for the account's investment data |
 | 24 | `bootflow:profile_setup` | the player clicking through the startup settings screens |
 | 25 | `bootflow:prepare_for_orbit` | a slice-set load, a status, then two network port checks |
 | 26 | `bootflow:rejoin_activity` | nothing remote; its first state comes from the profile data |
@@ -56,22 +56,22 @@ waits on is not.
 | 29 | `setup:orbit` | its handoff conditions; picks the destination on entry |
 | 30 | `setup:activity_session_creation` | the activity session and the matchmaking config reply |
 | 31 | `setup:matchmaking` | the matchmaking composition check |
-| 32 | `setup:activity_host_setup` | not read |
-| 33 | `setup:prologue_intro_loading` | the activity package load and the activity's name |
-| 34 | `setup:orbit_outro` | not read |
+| 32 | `setup:activity_host_setup` | activity slot 0 ready: the host request and `join_request` both answered |
+| 33 | `setup:prologue_intro_loading` | the activity package load and the activity's name from activity message 1 |
+| 34 | `setup:orbit_outro` | the orbit fly-away cinematic; no tasks and no time limit |
 | 35 | `setup:activity_world_transition` | the world change; needs the bubble count and slice sets |
 | 36 | `activity:initial_slice_set_loading` | eleven tasks: loading screen, slice-set load, region data |
 | 37 | `activity:physics_join` | a travel cinematic, if one is armed; capped at 15 s |
-| 38 | `activity:in_world` | nothing; the player is in the world |
+| 38 | `activity:in_world` | nothing while the activity runs; lifetime states 6, 7 and 10 start the post-game chain |
 | 39 | `activity:watch_video` | not read |
 
-Measured boots go 7 -> 16 -> 21. It skips steps 8 to 15 and 17 to 20. Those are account, content
+A boot goes 7 -> 16 -> 21. It skips steps 8 to 15 and 17 to 20. Those are account, content
 and queue gates: `entitlement_warning`, `sms_validation`, `free_license_limit_exceeded`,
 `excessive_mtx_debt`, `eula`, `upsell`, `email`, `confirm_account_transfer`, `content_install`,
 `insufficient_content_space`, `illegal_dlc_media` and `queuing`.
 
-Steps 40 to 49 are the `bubble_host:*` steps. From the names, they run when this client hosts a
-bubble. That is not verified.
+Steps 40 to 49 are the `bubble_host:*` steps. They are assumed to run when this client hosts a
+bubble.
 
 For the activity steps from 29 on, see
 [Activities and destinations](/docs/destiny-2/activities-and-destinations/).
@@ -106,8 +106,8 @@ struct BootStepDescriptor {          /* 0x48 or 0x70 bytes */
 Slot 5 is `CanAdvance`, the same function in every step. It checks the step's blocker bits.
 Slot 6 is the step's own `Update`, which runs each frame.
 
-A step's descriptor cannot be found by a fixed stride from its neighbor. The only sound source is
-the manager's constructor, which assigns each step its descriptor.
+Descriptors are not at a fixed stride from each other. The manager's constructor assigns each step
+its descriptor.
 
 ### The step object
 
@@ -119,12 +119,12 @@ struct BootStep {                    /* size varies per step */
     const BootStepDescriptor *desc;  /* +0x00 */
     uint64_t blocker_mask;           /* +0x08  bits CanAdvance checks */
     uint8_t  pad[0x20];
-    void    *wait_object;            /* +0x30  task block or event listener */
+    uint8_t  wait_object[];          /* +0x30  inline task block or listener; starts with a vtable */
     /* step-specific fields follow */
 };
 ```
 
-The object at `+0x30` depends on how the step waits:
+The object at `+0x30` is stored inline, not as a pointer. What it is depends on how the step waits:
 
 - A task-driven step (22, 23, 28) holds a task block. Steps 30 to 38 run the same task engine.
   Step 38 keeps its block at `+0x40`.
@@ -133,34 +133,35 @@ The object at `+0x30` depends on how the step waits:
 
 ### The task block
 
-A task-driven step runs up to 8 tasks. Four bit masks track them.
+The number of tasks differs per step. Step 23 has 8 task slots and runs 6. Step 30 has 6 tasks,
+step 33 has 2, step 36 has 11 and step 37 has 1. Four bit masks follow the task entries.
 
 ```c
 struct BootTaskEntry {               /* 32 bytes */
-    uint8_t prereq_mask;             /* tasks that must finish first; word before the entry */
-    void  (*start)(void);
-    int   (*poll)(struct TaskStatus *s); /* 3 = done, 1 = keep polling */
-    void  (*on_step)(void *step);
+    uint64_t prereq_mask;            /* +0x00  tasks that must finish first; low byte used */
+    void   (*start)(void);           /* +0x08 */
+    int    (*poll)(struct TaskStatus *s); /* +0x10  returns 0 to 3, as TaskStatus.state */
+    void   (*on_step)(void *step);   /* +0x18 */
 };
 
 struct TaskStatus {                  /* 16 bytes, built on the stack per call */
-    int32_t state;                   /* +0x00  0 new, 1 started, 2 failed, 3 done */
+    int32_t state;                   /* +0x00  0 requested, 1 started, 2 failed, 3 done */
     int64_t elapsed_ms;              /* +0x08 */
 };
 
-struct BootTaskBlock {
-    void         *vtable;            /* +0x000 */
-    BootTaskEntry tasks[8];          /* about +0x008; exact start not verified */
-    uint64_t      requested;         /* +0x108 */
-    uint64_t      started;           /* +0x110 */
-    uint64_t      failed;            /* +0x118 */
-    uint64_t      completed;         /* +0x120 */
-    uint64_t      time[8];           /* +0x128  start time, then duration */
+struct BootTaskBlock {               /* n = the step's task count */
+    void         *vtable;            /* +0x00 */
+    BootTaskEntry tasks[n];          /* +0x08 */
+    uint64_t      requested;         /* +0x08 + 32 * n; +0x108 when n is 8 */
+    uint64_t      started;
+    uint64_t      failed;
+    uint64_t      completed;
+    uint64_t      time[n];           /* start time, then duration */
 };
 ```
 
 A step is done when `requested == completed`. So `requested ^ completed` is the set of tasks still
-holding it.
+holding it. A task that is not requested reads as state -1.
 
 The client logs each finished task, for example
 `world_controller:task_manager: Completed task 'ENUM(2)' after '909ms'.` Task names print as
@@ -183,8 +184,7 @@ host is behind the local step, or while a fireteam join is in progress.
 
 ### The step loop
 
-The loop below is a model built from the known parts. The manager's own tick function is not
-verified.
+The loop below is a model of the known parts. The manager's own tick function is unverified.
 
 ```c
 void BootFlow_Tick(BootFlowManager *mgr)
@@ -261,10 +261,10 @@ Read `step` as where the client is now heading. Read `reason` as what went wrong
 site names the actual check.
 
 Reason names are blank in this build. Every reason prints as `unavailable`. Each reason slot does
-carry a unique 32-bit value. It may be a hash of the lost name. That is not verified.
+carry a unique 32-bit value. It may be a hash of the lost name. That is unverified.
 
-The reason numbers seem to come in blocks by subsystem. This grouping is inferred from the sites
-that raise each range:
+The reason numbers are assumed to come in blocks by subsystem. The sites that raise each range
+suggest this grouping:
 
 | reasons | apparent owner |
 |---|---|
@@ -272,7 +272,7 @@ that raise each range:
 | 23, 24, 54 to 66 | session and bubble-host lifecycle |
 | 121 to 128 | platform sign-in, entitlement and license |
 | 130 to 181 | content, account and investment sign-in |
-| 273 to 303 | license enumeration and the login queue |
+| 273 to 303 | license enumeration; 303 is an Investment-channel latch |
 | 335 to 361 | activity and world setup |
 
 ## Common failures
@@ -283,16 +283,22 @@ Every row here sets the goal to step 28 `cleanup`.
 |---:|---|---|
 | 4 | matchmaking | the composition check fails, for example a solo player counted as a "big party" |
 | 9 | `setup:orbit` | a join wait passes its time limit |
+| 16 | steps 33 to 38 | the step's own time budget runs out; the budget values are not readable statically |
 | 55 | steps 33 and 36 | a task fails; for step 33 often the activity package load |
 | 56 | `prepare_for_orbit` | the step's status lands on "failed" |
 | 57 | `setup:orbit` | an unnamed local check |
+| 104 | steps 36 to 38 | no bytes arrive on the Activity Host link for 20.5 s |
 | 124 to 128 | early sign-in | the content or entitlement fetch returns an error; 124 is the default |
 | 174 | `investment_signin` | a blocker fires, for example an investment reply that cannot be decoded |
-| 175 | `investment_signin` | task 0 runs past about 30 s, or the login-queue sign-in block is set |
-| 176 to 180 | `investment_signin` | the login queue's first error, as code + 174 |
-| 181, 303 | `investment_signin` | a login-queue latch is set |
+| 175 | `investment_signin` | task 0 runs past its time limit, about 30 s |
+| 176 to 180 | `investment_signin` | the first `queuez` error, codes 2 to 6, as code + 174 |
+| 181, 303 | `investment_signin` | one of two latches on the `queuez` manager is set |
 
-Reason 175 has more than one producer. The number alone does not name the site.
+`queuez` is the game's name for the channel that delivers Investment state, bdLobby service 123. It
+is not a login queue. Its error codes are on [Network stack](/docs/destiny-2/networking/#replicated-objects-service-123).
+
+Reason 175 has more than one producer. A blocker can also raise it, under other steps. The number
+alone does not name the site.
 
 Step 23 never fails with a nonzero reason of its own. A pair like `(23, 175)` cannot come from a
 direct call.
@@ -303,7 +309,7 @@ for. It does nothing every frame and reports nothing.
 
 ## Open questions
 
-- What steps 0 to 7, 21, 32, 34 and 39 wait on.
+- What steps 0 to 7, 21 and 39 wait on.
 - Whether the step table is several lists joined, and what steps 40 to 49 do.
 - The manager's own tick function.
 - Whether the 32-bit reason values are hashes of the lost reason names.

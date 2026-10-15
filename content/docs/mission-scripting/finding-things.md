@@ -1,6 +1,6 @@
 ---
 title: "Finding things in game"
-date: 2026-09-17
+date: 2026-10-15
 description: "Use the in-game tools to find the slot, squad, line or goal you need."
 weight: 100
 ---
@@ -22,8 +22,8 @@ tools come from `src/server/ui/activity_host/` and `src/core/ui/hud/` in the Sun
 
 1. Press **Insert**.
 2. Open the **Activity Host** page.
-3. In **Instance**, pick your activity. An active, linked instance is picked for you when it can
-   be.
+3. In **Instance**, pick your activity. When it can, the page picks an active, linked instance for
+   you.
 4. Under **Windows**, tick **World**.
 
 The World window has a page list on the left. Each page shows a one-line summary at the top.
@@ -32,24 +32,24 @@ The World window has a page list on the left. Each page shows a one-line summary
 |---|---|
 | Squads | find and test-place squads; see their spawn points |
 | Idles | find NPC idle sensors and their states |
-| Combatants | find actors; try their animation sequences |
+| Combatants | find actors; bind them, edit channels, try their animation sequences |
 | Devices | find doors, lifts and switches; move them |
 | Triggers | find trigger volumes and draw their shapes |
 | Objects | find any slot; fire a trigger; see positions |
-| Scenes | find scenes in the current state; start one |
+| Scenes | find scenes in the current state; start one and fire its inputs |
 | Dialogue | find voice lines in the current state; play one |
 | Directives | find goals; show or hide one |
 | Objectives | reset objectives; advance tasks |
 | Cinematics | play sequences and cinematics |
 | Engagement | send an engagement body |
-| Public event | start a public event |
+| Public event | watch one player against a public event area |
 | Occupancy | set an occupancy condition |
 | Lifetime | set the lifetime state |
 | States | list states and regions; move to one |
 | Mission state | read your variables and timers |
 | Positions | list package positions nobody's slot claims |
 | Behaviors | list compiled behavior roots; read only |
-| Script | your script's file, status, error, and **Reload script** |
+| Script | your script's file, attach result, status, error, and **Reload script** |
 
 A button on these pages sends the same kind of request a script would. Use them to test an idea
 before you write it.
@@ -76,7 +76,7 @@ Walk or fly to a spot, set **Show** to **Within radius**, and read the labels ar
 ## Find a squad
 
 1. Open **Squads**.
-2. Tick **Current state only** to see just the squads of the state you are in.
+2. Tick **Current state only** to see only the squads of the state you are in.
 3. Type part of a name in **Search**. The search also matches ids, tags and point coordinates.
 4. Tick **Draw** on a row and **Draw in world** to see its spawn points.
 5. Select the row. **Place this squad** lists each point as `point N 0xLIST[ord] (x, y, z)`.
@@ -110,7 +110,7 @@ Trigger slot names often start with `pt_`. The volume often has the same name.
 
 1. Open **Devices**. It is the Objects list limited to type 23.
 2. Select a row. Under **Actions**, pick a **Channel**, move **Normalized value**, and press
-   **Set channel**.
+   **Set channel**. Tick **Snap immediately** to jump to the value with no motion.
 3. Watch which thing moves.
 
 Device names often start with `d_`. The Lua key is `mission.Slot.D_...`.
@@ -150,16 +150,32 @@ lines of cue `N`.
 2. Press **Show** to see it on the HUD, and **Hide** to clear it.
 
 In the module, `mission.Directive` keys come from the title. A repeated title gets the name hash:
-`RENDEZVOUS_WITH_HAWTHORNE_1DD5B5F6`. Match the hash from the page to the key. The `slot_row` of
-the entry names its directive sensor; the sensor's key usually starts with `M_DIRECTIVE_SENSOR_`.
+`RENDEZVOUS_WITH_HAWTHORNE_1DD5B5F6`. Match the hash from the page to the key. The `sensor` of the
+entry is its directive sensor's `mission.Slot` value. Search the module for that value to find the
+sensor's key, which usually starts with `M_DIRECTIVE_SENSOR_`.
 
 ## Find a scene
 
 1. Open **Scenes**. It lists only the current state.
 2. The **scene** column shows the slot name and object. **linked squad** shows the squad it uses.
 3. Press **Advance** to start it.
+4. Press **Inputs** under **Advance**. The popup has a button for each trigger the scene waits on.
+   Press one to fire it in the running scene. Below the buttons it lists what the scene reports.
 
 The Lua key is `mission.Scene.<NAME>`, the same key as its slot.
+
+A scene that waits on an input stays idle after **Advance** until you fire that input. **Inputs**
+is greyed out when the scene has none. The **availability** column shows `last:` and the result of
+the last press, for example `queued`.
+
+In a script, the same triggers are in the mission module under the scene's key:
+
+| table | lists |
+|---|---|
+| `mission.SceneInput.<NAME>` | the triggers it waits on; send them with `send_event` |
+| `mission.SceneOutput.<NAME>` | the triggers it reports; they raise `on_event_scene_output` |
+
+A scene missing from `mission.SceneInput` plays on its own once started.
 
 ## Find an NPC idle
 
@@ -183,7 +199,7 @@ Turn on the **Current Status** overlay on the **HUD** page. It shows:
 
 | line | meaning |
 |---|---|
-| Activity | the running activity |
+| Activity | the package name of the loaded destination |
 | Bubble | `index 0xHASH name [host region]` |
 | Slice set | `region state N` |
 | Closest spawn | the spawn set of the spawn point nearest to you: its name hash, its name, and the distance |

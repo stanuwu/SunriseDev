@@ -1,6 +1,6 @@
 ---
 title: "Build a mission from scratch"
-date: 2026-09-17
+date: 2026-10-15
 description: "A whole mission in four beats, from survey to a finished run."
 weight: 90
 ---
@@ -20,7 +20,7 @@ All keys below are placeholders. You will find the real ones in step 2.
 
 1. Pick an activity whose map has what you need: an area to fight in, a door, triggers.
 2. Find its script path and mission module. See [Your first script](/docs/mission-scripting/first-script/), steps 3 and 4.
-3. Write the beats down as a list, like the one above. Each beat is one step later.
+3. Write the beats down as a list, like the one above. Each beat becomes one step in the code.
 
 For each beat, note:
 
@@ -237,7 +237,7 @@ How it fits together:
 5. Play through. Watch which step is stuck.
 6. Fix, save, press **Reload script**.
 
-When a step never finishes, the matching fact never turned true. Check:
+When a step never finishes, its fact never turns true. Check:
 
 | stuck at | check |
 |---|---|
@@ -261,11 +261,16 @@ When a step never finishes, the matching fact never turned true. Check:
   `context.activity_role`.
 - **Seeded objects.** Objects you spawn later belong in `initial_state.omit`.
 
-## A shortcut for story missions
+## Shortcuts
 
 A linear mission of goals, triggers and encounters fits `lib.campaign`. It builds the flows, arms
-triggers per region, shows goals and plays lines from one content table. The Red War drafts under
-`scripts/mission_*` use it. See [The shared script libraries](/docs/mission-scripting/libraries/).
+triggers per region, shows goals and plays lines from one content table. The story missions under
+`scripts/mission_*`, most adventures and the strikes use it.
+
+An open-world destination fits `lib.freeroam`. It places each zone's population, respawns it, and
+runs public events and Lost Sectors. The `scripts/*_freeroam` scripts use it.
+
+See [The shared script libraries](/docs/mission-scripting/libraries/) for both.
 
 ## Checklist
 

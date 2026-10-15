@@ -1,7 +1,7 @@
 ---
 title: "Packages"
-date: 2026-09-28
-description: "The Tiger package format: file names, header, entry table, blocks and named tags."
+date: 2026-10-15
+description: "The Tiger package format: file names, header, entry table, blocks, named tags, and how entries get loaded."
 weight: 10
 ---
 The game keeps its content in `.pkg` files, called packages. A package holds many entries. Each
@@ -67,7 +67,7 @@ struct PackageHeader {              /* 0x180 bytes read */
     uint16_t language;              /* +0x22  matches the locale in the file name */
     char     tool_string[128];      /* +0x24  zero in every file */
     uint8_t  unknown_a4[0x0C];      /* +0xA4 */
-    uint32_t signature_offset;      /* +0xB0  file offset of a signature block */
+    uint32_t signature_offset;      /* +0xB0  file offset of the signature; 0x800 in every file */
     uint32_t entry_count;           /* +0xB4  1 to 8192 */
     uint32_t entry_table_2017;      /* +0xB8  entry table offset, 2017 layout only */
     uint8_t  unknown_bc[0x14];      /* +0xBC */
@@ -76,9 +76,13 @@ struct PackageHeader {              /* 0x180 bytes read */
     uint8_t  unknown_d8[0x14];      /* +0xD8 */
     uint32_t unknown_ec;            /* +0xEC  zero in most packages; not the misc size */
     uint32_t misc_offset;           /* +0xF0  file offset of the misc block; 0 = none */
-    uint8_t  unknown_f4[0x1C];      /* +0xF4 */
-    uint32_t entry_table_raw;       /* +0x110 entry table offset minus 96, later layout */
-    uint8_t  unknown_114[0x50];     /* +0x114 */
+    uint32_t misc_length;           /* +0xF4  bytes the misc block hash covers */
+    uint8_t  misc_sha1[20];         /* +0xF8  SHA-1 of the misc block */
+    uint8_t  unknown_10c[4];        /* +0x10C */
+    uint32_t entry_table_raw;       /* +0x110 table blob offset; entry table is at +96 */
+    uint32_t table_blob_length;     /* +0x114 bytes the table blob hash covers */
+    uint8_t  table_blob_sha1[20];   /* +0x118 SHA-1 of the table blob */
+    uint8_t  unknown_12c[0x38];     /* +0x12C */
     uint32_t file_size;             /* +0x164 exact size of this file */
     uint32_t locale_check;          /* +0x168 a per-locale value the client checks at load */
     uint8_t  locale_id;             /* +0x16C 0, or 1 for the three unp1 packages */
@@ -91,7 +95,36 @@ Notes:
 - `entry_count` is capped at 8192. The client rejects a larger value. 8192 is also the limit a tag
   can address, because a tag has 13 bits for the entry index.
 - `entry_count` and `block_count` are different fields. They are never equal in this install.
+- The package id range `0x100` to `0xA9F` is not a validity check. A package outside it still
+  loads. The loader only skips recording its content build.
+- `locale_check` has one value for every locale-0 package and another for the three locale-1
+  packages. It depends on the locale and on the content id the client holds, not on the package.
+  A client with the wrong content id fails every locale-0 package at this check.
 - The `unknown_*` gaps are fields that are not identified.
+
+### The signature and the footer
+
+The 256 bytes at file offset `0x800` are a signature, followed by zero bytes. It is RSA-2048 PSS
+with a 16-byte salt, over the SHA-256 of header bytes `0x000` to `0x16F`. The client holds one
+public key for it. Every installed package verifies.
+
+So any edit to the first `0x170` bytes breaks the signature. That range includes `file_size` and
+`locale_check`.
+
+The last `0x800` bytes of every package are not a signature. They are `0xDEADBEEF` followed by 2044
+zero bytes. A tool that rewrites a package does not need to refresh them.
+
+### What the client checks at load
+
+| check | data | result on the install |
+|---|---|---|
+| header signature | the signature above | every package passes |
+| misc block hash | SHA-1 of `misc_length` bytes at `misc_offset`, against `misc_sha1` | every package passes |
+| table blob hash | SHA-1 of `table_blob_length` bytes at `entry_table_raw`, against `table_blob_sha1` | every later-layout package passes |
+
+The table blob check also bounds the blob's own entry count to 8192. Packages in the 2017 layout
+have no table blob: all three fields are zero. Whether the client runs the table blob check on them
+is unverified.
 
 ### Two header layouts
 
@@ -157,8 +190,8 @@ start_offset = ((block_info >> 14) & 0x3FFF) << 4;   /* byte offset in that bloc
 size         = block_info >> 28;                     /* entry size in bytes */
 ```
 
-`type_info` carries a file type in bits 9 to 15 and a subtype in bits 6 to 8. This split comes from
-public tooling. It is not verified against the client. The other bits are unknown.
+`type_info` carries a file type in bits 9 to 15 and a subtype in bits 6 to 8. This split is not
+verified against the client. The other bits are unknown.
 
 In the later layout, `reference` is the tag's class. In the 2017 layout it is often a tag that
 points at a descriptor entry instead.
@@ -194,7 +227,7 @@ struct BlockRecord {                /* 48 bytes */
     uint32_t size;                  /* +0x04  stored size in bytes */
     uint16_t patch_id;              /* +0x08  which patch file holds the bytes */
     uint16_t flags;                 /* +0x0A  see below */
-    uint8_t  hash[20];              /* +0x0C  Sunrise does not read it; meaning not verified */
+    uint8_t  hash[20];              /* +0x0C  Sunrise does not read it; meaning unverified */
     uint8_t  auth_tag[16];          /* +0x20  authentication tag for an encrypted block */
 };
 ```
@@ -210,6 +243,13 @@ decompress.
 
 The block bytes are in the file `w64_<family>_<id>_<block.patch_id>.pkg`. This can be an older patch
 than the file whose table you are reading.
+
+The client reads every block of an entry from the patch file its first block names. It never reads
+the `patch_id` of the later blocks. The first block's `patch_id` must also equal the patch the
+request is for, or the load fails.
+
+So a tool that writes a patch must put each edited entry wholly into blocks of one patch file. An
+entry whose blocks are split across patch files reads the wrong bytes.
 
 ### Encryption
 
@@ -244,11 +284,13 @@ bytes read_entry(uint16_t id, uint32_t index) {
     skip  = ((e.block_info >> 14) & 0x3FFF) << 4;
     size  = e.block_info >> 28;
 
-    out = empty;
+    out   = empty;
+    first = read_block_record(file, block_table + start * 48);
     for (b = start; out.length < size; b++) {
         if (b >= header.block_count) return FAIL;
         rec  = read_block_record(file, block_table + b * 48);
-        data = read(patch_file(id, rec.patch_id), rec.offset, rec.size);
+        /* every block comes from the patch file the first block names */
+        data = read(patch_file(id, first.patch_id), rec.offset, rec.size);
         if (rec.flags & 0x2) data = decrypt(data, key(rec.flags & 0x4), rec.auth_tag);
         if (rec.flags & 0x1) data = oodle_decompress(data);
         from = (b == start) ? skip : 0;
@@ -260,14 +302,16 @@ bytes read_entry(uint16_t id, uint32_t index) {
 }
 ```
 
-Sunrise does the same in `src/middleware/content/packages/reader/package_entry_reader.cpp`. It
-keeps decoded blocks in a cache, because neighboring entries often share a block.
+Sunrise reads entries in `src/middleware/content/packages/reader/package_entry_reader.cpp`. It
+takes each block from the patch file its own record names. That gives the same bytes as long as an
+entry's blocks sit in one patch file. It keeps decoded blocks in a cache, because neighboring
+entries often share a block.
 
 ## The misc block and named tags
 
 `misc_offset` at `+0xF0` points at the misc block. A value of 0 means the package has none. The
-block has no size field. It always sits below the entry table, so bound it by the entry table
-offset.
+block always sits below the entry table, so bound it by the entry table offset. `+0xEC` is not its
+size. Whether `misc_length` always covers the whole block is unverified.
 
 The misc block holds array fields. Their positions are not fixed. To find a table, walk the block's
 array fields and keep each one whose prefix has marker `0x80809FBD` and the element class you want.
@@ -294,8 +338,8 @@ Rules for using these names:
   the entry tables by class before you conclude that.
 - Read names from the newest patch only. An old patch can name an entry index that a later patch
   reuses for a different tag.
-- Trust a name only when `class_id` equals the live class of the tag. In the install, some old names
-  point at tags whose class has since changed.
+- Trust a name only when `class_id` equals the live class of the tag. In the install, some names
+  point at tags whose live class differs from `class_id`.
 
 ### The 64-bit name hash table
 
@@ -311,7 +355,7 @@ struct NameHash64 {                 /* 16 bytes */
 
 Some content links by this 64-bit hash, not by a tag. A map root names its bubbles this way. A walk
 that follows only tag references stops at the map root. Which hash function makes `name_hash` is
-not verified.
+unverified.
 
 ### The client's own name lookup
 
@@ -328,6 +372,89 @@ struct NameIndexEntry {             /* 8 bytes, element class 0x80809252 */
 The lookup binary-searches this array. So a name can be in this index and not in any named-tag
 table, and the other way round. For example, `player_globals` is only in the client's index.
 [Tags, classes and definitions](/docs/destiny-2/tags-and-definitions/#name-hashes) gives the hash.
+
+## How an entry gets loaded
+
+The client never loads a whole package. An entry loads in one of three ways:
+
+1. A dependency record names it. Maps load this way.
+2. A manifest names it. A manifest loads together with its root tag.
+3. Code asks for its handle directly. Item, vendor and string language records load this way.
+
+An entry that none of the three reaches is never requested. A reference to it from loaded content
+then points at nothing.
+
+### Dependency records
+
+A package's dependency records are load lists. A map loads the entries its records name, not every
+entry in its package. A record can name entries of any package.
+
+The records sit in the misc block:
+
+| misc offset | content |
+|---|---|
+| `+0x00` | u64 header size; the record stream starts at `align8(size)` |
+| `+0x30` | root record count; child record indices count from here |
+| `+0x40` | array of record words |
+
+A record word holds three flag bits and a stream offset in its low 29 bits. The record body follows
+in flag order:
+
+| flag | section |
+|---|---|
+| bit 31 | `u16` group count, then per group `{u16 package, u16 words}` and that many `u16` run words |
+| bit 29 | `u16` count, then `u16` child record indices |
+| bit 30 | `u16` count, zero padding to 8 bytes, then `u64` keys |
+
+A run word with any of its top three bits set marks `word >> 13` entries starting at
+`word & 0x1FFF`. A word with none of them set gives a run of `word + 1`, and the next word gives the
+start.
+
+239 of the 528 newest packages hold records. Every record table re-encodes to its original bytes.
+
+A patched record can make a new package load, because a record can name any package. How Sunrise merges the records of several mods is on
+[Mods](/docs/sunrise/mods/#two-mods-patching-one-package).
+
+### Manifests
+
+A manifest is a tag of class `0x80809EF9`. The install holds 53,342. Each belongs to one root entry.
+A root has `0x2000` in the `0xF000` nibble of its entry type field. When the client requests such a
+root, it also requests the root's manifest and marks every entry the manifest lists.
+
+| manifest offset | content |
+|---|---|
+| `+0x00` | u64 size of the tag |
+| `+0x08` | u32 the manifest's own tag |
+| `+0x0C` | u32 its root tag |
+| `+0x10` | group array: count, then a relative offset |
+| `+0x20` | record key array, as in dependency records |
+
+A group is 40 bytes, and groups are sorted by package id:
+
+| group offset | content |
+|---|---|
+| `+0` | u16 package id; `0x100` to `0xCFF` are accepted |
+| `+8` | u32 bitmap word count, then at `+16` the offset of a bitmap; bit `n` marks entry `n` |
+| `+24` | u64 entry count, then at `+32` the offset of a `u16` entry list |
+
+An offset is relative to the field that holds it, and 0 means none. Every installed manifest lists
+both its root tag and its own tag.
+
+The root-to-manifest map is not in the misc block. It is in the package metadata that header
+`+0x110` locates: an array of `{u32 root tag, u32 manifest tag}` rows, element class `0x80809A13`,
+sorted by root tag.
+
+The manifests list 2,784,122 tags in all. For example, the manifest of `investment_globals` lists
+all 4,495 string containers, the string bank index, the investment root blob and the item table. No
+manifest lists item records, vendor records or string language data. Those load on request.
+
+### Streamed texture entries
+
+An entry whose type field has `0x6000` in the `0xF000` nibble is a streamed texture buffer. Content
+may reference it, but it never belongs in a manifest. No installed manifest lists one: 15,478 such
+entries exist and none appears in any of the 1,191,098 manifest groups. The loader reads a streamed
+entry's owner record without a null check, so listing one as resident is a crash risk. That a listed
+streamed entry reaches that read is unverified.
 
 ## What the families hold
 

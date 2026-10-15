@@ -1,6 +1,6 @@
 ---
 title: "Accounts, characters and saves"
-date: 2026-09-28
+date: 2026-10-15
 description: "How Sunrise stores the player's account and sends it to the game over the BAP link."
 weight: 40
 ---
@@ -22,7 +22,8 @@ DLL. The code is in `src/state/investment/`.
 - On a later start Sunrise checks the schema version. Version 1 is upgraded to version 2 in place.
   Any other version, or a file from another program, is refused.
 - Every write runs inside a SQLite savepoint. A failed write rolls back and leaves no partial rows.
-- Writes are synchronous (`PRAGMA synchronous=FULL`). No unsaved copy is held in memory.
+- Writes are synchronous (`PRAGMA synchronous=FULL`). No unsaved copy is held in memory, except in
+  a [cheat session](#cheat-sessions).
 
 The file is plain SQLite. Back it up before you edit it by hand.
 
@@ -45,6 +46,25 @@ The file is plain SQLite. Back it up before you edit it by hand.
 | `account_*` | game settings: controls, audio, display, interface, social, key bindings |
 
 The `account_*` tables come from a second schema file, `account_settings_schema.sql`.
+
+### Cheat sessions
+
+When a loaded mod sets `"cheat": true`, or `client.cheats` unlocks the cheat tools in
+`settings.json`, the session never writes to the file.
+
+1. After the mods load and the save opens, Sunrise copies the database into memory with the SQLite
+   backup API. This runs before account repairs or progression seeding read mod content.
+2. It closes the file and sends every read and write to the copy.
+3. The copy is gone when the game exits.
+
+So every table above is back to its old state after a restart, game settings and key bindings
+included. Account repairs and progression seeding also stay in the copy. Creating a new database
+or upgrading its schema happens when the file opens, before the copy.
+
+If the copy fails, Sunrise does not start. The code is `use_session_copy` in
+`src/state/investment/investment_database.cpp`. How a mod sets the flag is in
+[Mods](/docs/sunrise/mods/#cheat-mods). The settings key is in
+[Settings, logs and in-game tools](/docs/sunrise/settings-and-logs/#client).
 
 ## The account model
 
@@ -106,7 +126,7 @@ The game sends 503 once, on the main link, during boot step 23. The reply is bui
 
 1. the status pair: code 0, and value -1, which means "no family 4 version to wait for"
 2. the account SOID, 64 bits
-3. two 32-bit fields that nothing reads; Sunrise sends 0
+3. two 32-bit fields that nothing reads. Sunrise sends 0.
 4. the family 5 object: a fixed sentinel SOID, the server clock, and the override lists from the
    `family5` table
 
@@ -115,8 +135,8 @@ family 5 update whose clock is not newer.
 
 ### Replicated families: queuez
 
-The queuez service is a replicated object store. The client holds a copy of each family it subscribed to. The
-server keeps it current with pushes on service 123. There is no "get everything" request.
+The queuez service is a replicated object store. The client holds a copy of each family it
+subscribed to. The server keeps it current with pushes on service 123. There is no "get everything" request.
 
 A family is identified by its type and a root SOID. Sunrise builds these types:
 
@@ -277,9 +297,11 @@ The dispatch is in `src/server/web_service/web_service_runtime.cpp` and
 | 402 | dismantle an item |
 | 403, 404 | equip, unequip |
 | 406 | change item state flags |
+| 501 | return the selected character's SOID |
 | 503 | account bootstrap |
 | 504 | pick a character |
 | 505 | change character |
+| 601 | complete a loot pickup |
 | 701 | save game settings |
 | 702 | the character write-back the client sends on its own |
 | 801 | pick a subclass |
@@ -309,6 +331,8 @@ has on record for that opcode, or no status at all.
 The session-only fields live beside the database, not in it (`Session` in
 `src/state/investment/store_internal.h`). After a restart no character is selected until the
 player picks one.
+
+In a [cheat session](#cheat-sessions) nothing in the left column changes on disk.
 
 ## Open questions
 

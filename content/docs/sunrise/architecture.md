@@ -1,6 +1,6 @@
 ---
 title: "How Sunrise is built"
-date: 2026-09-28
+date: 2026-10-15
 description: "The parts, threads and startup order of the Sunrise DLL."
 weight: 10
 ---
@@ -26,8 +26,13 @@ points that matter:
 The other `SteamAPI_*` and `SteamInternal_*` exports answer the game's Steam questions locally:
 user, language, callbacks, interfaces. The code is in `src/steam/`.
 
-The DLL also exports `SunriseInitialize`, `SunriseActivateClient` and `SunriseShutdown`. They run
-the same startup and shutdown steps for a host that loads the DLL another way.
+The DLL also exports three entry points for a host that loads it another way:
+
+| export | what it runs |
+|---|---|
+| `SunriseInitialize` | the egress guard, then `core::initialize` |
+| `SunriseActivateClient` | the game image scan and the main hook install |
+| `SunriseShutdown` | the same shutdown as `SteamAPI_Shutdown` |
 
 ## The layers
 
@@ -59,7 +64,8 @@ Core holds the parts with no game knowledge.
 | `logging/` | the log sinks, the line format and the in-memory log view |
 | `filesystem/` | the `Sunrise` folder and the paths under it |
 | `threading/` | lock helpers |
-| `ui/` | the menu and HUD framework: layout, theme, fonts, overlays, world markers |
+| `json/` | the JSON reader that `settings.json`, `mod.json` and `mod_config.json` are parsed with |
+| `ui/` | the menu and HUD framework: layout, theme, fonts, overlays, notices, world markers; and the Core pages HUD, Logs and Mods |
 | `runtime/` | the startup and shutdown order across all layers |
 
 `core/runtime` calls each layer's start and stop in order. See [Startup order](#startup-order).
@@ -82,10 +88,15 @@ The client layer is the only layer that reads or changes the game's code.
 | folder | what it owns |
 |---|---|
 | `patterns/`, `targets/` | find game functions by byte pattern and keep the resolved addresses |
+| `executable/`, `memory/`, `process/` | read the game image's sections, access game memory, and stop the other threads for a code patch |
+| `hooking/` | the Detours wrapper: one transaction per hook group, and a detach that waits for running calls |
 | `hooks/` | every hook; see [Client hooks](/docs/sunrise/client-hooks/) |
 | `network/` | `consumer.h`, the request types the hooks hand to the server |
 | `content/` | workers that read the installed packages and build caches and the activity SDK |
+| `diagnostics/` | the game side of the [Sunrise Studio link](#the-sunrise-studio-link): camera, world, object, animation and CUI screen data |
+| `activity/` | the mission launcher, which starts an activity through the game's own entry points |
 | `movement/`, `player/` | the saved values of the Movement and Player pages, and the player position |
+| `graphics/`, `input/` | display setup under Wine, and the game window's focus |
 | `ui/` | the Movement, Player and Activity Launcher menu pages |
 | `runtime/` | installs the hooks in groups and removes them at shutdown |
 
@@ -102,13 +113,14 @@ to send.
 |---|---|
 | `signon/` | the SignOn request and response |
 | `bap/` | BAP frames, the service catalog and every service body, including the activity messages |
-| `secure_channel/`, `crypto/` | the encrypted BAP frame and the ciphers it needs |
+| `secure_channel/`, `crypto/` | the encrypted BAP frame and the ciphers it needs; SHA-1 for the package header digests |
 | `web_service/` | the ws RPC envelope and one codec per opcode |
 | `queuez/` | the service 123 update body |
 | `datagen/` | builds the game's account, character and roster records from Sunrise's state |
 | `protobuf/`, `encoding/`, `compression/` | protobuf, the bit-packed codec, and Oodle |
-| `content/` | the package reader, named tags and the package tables |
+| `content/` | the package reader and its mod overlay, named tags, the package tables, the package merge and config bake writers, and the CUI checks for mod config bindings |
 | `gameplay/` | the peer transport: association, DTLS records, NAT, peer and group messages |
+| `runtime/` | loads the package name catalog on the first boot |
 
 The formats are described in the [Destiny 2](/docs/destiny-2/) section.
 
@@ -122,8 +134,10 @@ State is what the server knows about the world. It holds facts, not protocol.
 | `equipment/`, `progression/`, `unlocks/`, `entitlements/` | equipped gear and light, progress, unlock flags, owned content |
 | `activity/` | activity sessions, bubbles, membership, entity slots and destinations |
 | `activity_sdk/` | the generated activity SDK that mission scripts read |
-| `build_data/` | game data read from the installed packages: items, activities, vendors, records and more |
-| `content_manifest/` | the scan of the installed packages, and its cache |
+| `build_data/` | game data read from the installed packages and mod packages: items, activities, vendors, records and more |
+| `content_manifest/` | the scan of the installed packages, its cache, and the rows mods add |
+| `content/` | the name-to-definition catalog read from the installed content |
+| `mods/` | the [mod](/docs/sunrise/mods/) loader: discovery, manifests, load order, package checks, merges, mod config |
 | `matchmaking/`, `gameplay/`, `steam/` | matchmaking config, replicated entity state, local Steam data such as rich presence and achievements |
 | `runtime/` | starts the state, and holds the per-run values such as session tokens |
 
@@ -142,6 +156,7 @@ The server answers the game. It reads requests, asks state, and uses middleware 
 | `activity/` | the Activity Host and the mission script runtime |
 | `gameplay/` | the gameplay UDP endpoint and its peer protocol |
 | `runtime/` | the server thread and its service slice |
+| `studio/` | the command side of the [Sunrise Studio link](#the-sunrise-studio-link): mod script reloads |
 | `ui/` | the Activity Host menu page and its World and Packets windows |
 
 See [The Activity Host](/docs/sunrise/activity-host/) and [Mission scripting](/docs/mission-scripting/).
@@ -152,7 +167,7 @@ The main direction is one way: the server uses middleware and state, and everyon
 
 | layer | uses |
 |---|---|
-| core | the other layers only in three places: `core/runtime` starts them, `settings/` parses into state types, and the HUD overlays read their status |
+| core | the other layers only in three places: `core/runtime` starts and stops them, `settings/` parses into state types, and the HUD overlays and the Mods page read their status |
 | steam | core; it starts the server thread and the client activation |
 | client | core, middleware and state; the server only as noted below |
 | middleware | core and state |
@@ -163,6 +178,7 @@ Three links cross the main direction:
 
 - **Middleware and state use each other.** `datagen` reads the account from state to build the
   game's records. State uses a few middleware parts, such as the loadout resolver and SHA-256.
+  The mod loader in state hands the mod package files to the middleware package reader.
 - **The client reaches the server in two places.** It registers an investment consumer with the BAP
   server at start, and one world-marker renderer reads the current activity link.
 - **The server uses client UI code.** The Activity Host windows draw world markers with the client's
@@ -180,11 +196,15 @@ Sunrise keeps its files in one folder, `Sunrise`, beside the DLL. For a normal i
 |---|---|
 | `settings.json` | the settings; see [Settings, logs and in-game tools](/docs/sunrise/settings-and-logs/) |
 | `logs/sunrise.log` | the log, when the file log is on |
-| `cache/` | caches built from the installed packages |
+| `cache/` | caches built from the installed packages and mod packages |
+| `cache/mods/` | merged and configured mod package files |
 | `data/investment.sqlite3` | the persistent SQLite database |
 | `sdk/` | the generated activity SDK, with `sdk/catalog.bin` and `sdk/lua/` |
 | `scripts/` | your mission scripts |
-| `movement.json`, `player.json`, `hud.json`, `world_markers.json` | values saved by the menu pages |
+| `mods/` | installed mods, one folder each; Sunrise creates the folder |
+| `mod_config.json` | the mod config values changed on the Mods page |
+| `exports/package_keys.bin` | the package keys for Sunrise Studio, when `client.dump_package_keys` is on |
+| `movement.json`, `player.json`, `hud.json`, `world_markers.json` | values saved by the menu pages; see [Values the menu saves](/docs/sunrise/settings-and-logs/#values-the-menu-saves) |
 
 ## Startup order
 
@@ -204,11 +224,18 @@ core::initialize(module):          /* each step must succeed, or every earlier o
     settings::initialize();        /* reads Sunrise/settings.json */
     log::initialize();             /* opens the sinks */
     ui::runtime::initialize();     /* menu visibility and toggle key */
-    hud::initialize(); logs::initialize();     /* the two Core menu pages */
-    initialize_state();            /* database, account, build data */
-    initialize_content_manifest(); /* reads the installed packages, then the activity SDK */
+    hud::initialize(); logs::initialize(); mods_page::initialize();  /* the three Core pages */
+    initialize_content_manifest(): /* outside the game process only the SDK step runs */
+        content_manifest::initialize();   /* reads the installed packages */
+        mods::initialize();               /* loads and serves the mods; a failure only logs */
+        build_data::bind_content();       /* its cache keys on the content, mods included */
+        initialize_activity_sdk();        /* keys on the installed packages only */
+    investment::store::initialize();  /* opens or creates the save database, then checks it */
+    initialize_cheat_session();    /* in-memory save copy for a cheat mod or client.cheats */
+    state::initialize();           /* account and build data */
     middleware::initialize();      /* package name catalog, first boot only */
     server::initialize():
+        activity::mission::initialize();  /* mission script runtime */
         register_http_consumer(http::consume);
         register_bap_consumer(bap::consume);
         transport::initialize();   /* BAP listener on 127.0.0.1:bap_port; a failure only warns */
@@ -226,13 +253,15 @@ main_ok = activate_main_once();    /* scan the game image, install the network a
 deliver_queued_steam_callbacks();
 if (main_ok) {
     apply_feature_flags_once();
-    start_server_thread_once();    /* from here the server has its own thread */
+    server::start_service();       /* from here the server has its own thread */
     service_client_workers();      /* investment, SDK generation, scriptables */
 }
 ```
 
-If a step of `core::initialize` fails, the log gets `ev=initialize stage=<step> result=fail`. If the
-image scan fails, the screen shows "Sunrise could not attach to the game. The boot will not finish."
+If a step of `core::initialize` fails, the log gets `ev=initialize stage=<step> result=fail`. A
+failed mod load is the exception: it logs `ev=initialize stage=mods result=fail`, and the game
+starts with no mods. If the image scan fails, the screen shows "Sunrise could not attach to the
+game. The boot will not finish."
 
 ## Threads
 
@@ -245,20 +274,21 @@ answers, so the game must not be the server's clock.
 | the server thread | one service slice every 10 ms: BAP transport, Activity Host, mission scripts, gameplay endpoint |
 | the game thread that sends an HTTP request | the SignOn answer, built in place by `server::http::consume` |
 
-The server thread is started once, from `start_server_thread_once` in
-`src/steam/runtime/callbacks/callback_dispatch.cpp`, on the first frame after the image scan
-succeeds. Its loop is:
+The server owns its thread (`src/server/runtime/server_runtime.cpp`). The frame pump calls
+`server::start_service` on each frame after the image scan succeeds. The first call starts the
+thread. If that fails, the next frame tries again. Server shutdown signals the thread and waits for
+the running slice to end. The loop is:
 
 ```c
-for (;;) {
-    Sleep(10);
+while (WaitForSingleObject(stop_event, 10) == WAIT_TIMEOUT) {
     server::service(GetTickCount64());
 }
 
 void server::service(uint64_t now) {
     transport::service(now);           /* accept, read, route frames, write answers */
     activity::host::service(now);
-    activity::mission::service(now);   /* mission scripts */
+    studio::service(now);              /* the Studio command link; timed with the mission stage */
+    activity::mission::service(now);   /* mission scripts and script reloads */
     gameplay::service(now);
 }
 ```
@@ -280,7 +310,9 @@ same process.
 The egress hooks in `src/client/hooks/egress/` replace the Winsock connect and send calls and the
 name resolvers. Every IPv4 destination keeps its port but gets its address replaced with the
 redirect target. The target is `127.0.0.1`, or `client.external_server.host` when the external
-server is on. A connect the policy cannot redirect fails with `WSAEACCES`.
+server is on. A connect the policy cannot redirect fails with `WSAEACCES`. The game's Demonware
+discovery query is answered by the hooks themselves. The guard attaches before Core starts and
+never detaches.
 
 ### HTTP: SignOn
 
@@ -329,8 +361,9 @@ struct BapRequest {
 };
 ```
 
-These types are in `src/client/network/consumer.h`. Every request from a hook to the server goes
-through them. The two other client-to-server links are listed in
+The listener calls `bap::consume` itself; no hook is involved. The type sits in
+`src/client/network/consumer.h` beside the HTTP request types, which the HTTP hook uses to reach
+the server. The two other client-to-server links are listed in
 [How the layers depend on each other](#how-the-layers-depend-on-each-other).
 
 ### Gameplay traffic
@@ -338,3 +371,23 @@ through them. The two other client-to-server links are listed in
 In-activity gameplay uses UDP. With `server.gameplay.topology` set to `embedded`, the server binds
 its own UDP endpoint (`src/server/gameplay/endpoint/`). The port settings are on
 [Settings, logs and in-game tools](/docs/sunrise/settings-and-logs/).
+
+## The Sunrise Studio link
+
+Sunrise Studio talks to a running game through named shared memory, never a socket. Studio creates
+each mapping. Sunrise only opens one that already exists, at most once a second. It drops the
+mapping when Studio's heartbeat goes stale. The link is off unless `core.studio_attach` is `true`.
+
+| part | code | runs on | does |
+|---|---|---|---|
+| camera, world, object and animation links | `src/client/diagnostics/studio/` | the game's camera callback | publishes snapshots; reads only |
+| CUI link | `src/client/diagnostics/studio/` | the game's UI frame, after the game's own UI update | copies the open CUI screens and one widget tree; reads only |
+| command link | `src/server/studio/` | the server thread, right before the mission scripts run | takes a `reload_mod` request and answers it once |
+
+A `reload_mod` request names one mod. The mod must have loaded this session. The command link hands
+it to the mission runtime, which reloads the scripts of that mod and of the mods that depend on it.
+The answer comes after every affected mission reaches a safe point. The **Reload script** button on
+the Script page of the World window uses the same path for every running script. The reload rules are in
+[Debugging a script](/docs/mission-scripting/debugging/).
+
+The mapping names, layouts and timings are on [The live link](/docs/sunrise-studio/live-link/).

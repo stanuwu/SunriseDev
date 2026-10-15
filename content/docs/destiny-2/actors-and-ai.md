@@ -1,17 +1,16 @@
 ---
 title: "Actors and AI"
-date: 2026-09-28
-description: "How client actors get commands and walk, the object-behavior VM, and the authored squad spawner."
+date: 2026-10-15
+description: "How client actors get commands and walk, action kinds, the authored squad spawner, and the class definitions objects are built from."
 weight: 90
 ---
 
 The client carries the full AI stack. The client that holds authority over a bubble can run the
 actors in it: their commands, path finding and behavior. The Activity Host sends encounter state.
-Whether retail also used a separate physics or AI host is unknown.
+Whether retail also runs a separate physics or AI host is unknown.
 
-Behavior node, object filter and action names are the game's own. They come from the class names
-in a console build of the same era. Function and field names are descriptive labels. The 98 actor
-command selectors have no engine names and are known only by number.
+Action and object type names are the game's own. Function and field names are descriptive labels. The 98 actor command selectors have no engine names and are known only by
+number.
 
 For slot types, Auth and Sense, see
 [The Activity Host protocol](/docs/destiny-2/activity-host-protocol/).
@@ -42,7 +41,7 @@ one into a 128-byte runtime command.
 
 ```c
 struct ActorCommand {          /* 128 bytes */
-    uint8_t body[96];          /* +0x00  holds the payload; exact layout not read */
+    uint8_t body[96];          /* +0x00  holds the payload; exact layout unknown */
     int8_t  selector;          /* +0x60  0 to 97 */
     uint8_t pad[25];
     uint8_t route;             /* +0x7A  how to resolve the payload's references */
@@ -169,7 +168,7 @@ term of that check is a parenting test. No authority or ownership test is on thi
 
 The actor executor updates one actor per tick. Each actor gets a time slice for the frame. When the
 slice is zero, the path client, mover, policy and sensors all skip that frame. Running totals are
-checked against three caps; crossing one sets a throttle bit.
+checked against three caps. Crossing one sets a throttle bit.
 
 This is an update-rate throttle, not a data gate. It can make one actor move on some frames and not
 others.
@@ -189,7 +188,7 @@ It waits for them in the same call. A query's status is -1 when idle and 10 when
 call is on this path.
 
 A sibling pipeline picks firing points (`ai: fp select job`, `ai: fp path finding job`). Whether a
-firing point becomes a movement goal is not verified.
+firing point becomes a movement goal is unverified.
 
 ### Nav data
 
@@ -210,7 +209,7 @@ struct ActorCommandMeta {       /* 32 bytes */
     uint8_t  exclusion_group;   /* +0x02  0 = no conflicts */
     uint8_t  chain_previous;    /* +0x03  keep and chain the previous record */
     int32_t  ordinal;           /* +0x04  -1 when +0x00 is clear */
-    uint64_t opaque;            /* +0x08  no reader found */
+    uint64_t opaque;            /* +0x08  no known reader */
     uint64_t payload_bytes;     /* +0x10  exact copy length */
     uint64_t payload_class;     /* +0x18  reflected payload class */
 };
@@ -244,148 +243,16 @@ Selector 45 shows why the two paths matter. It sets the faction on the main path
 drops it, because that consumer only handles selectors 4, 14 and 15. So a faction command sent as a
 one-shot event does nothing.
 
-## The object-behavior VM
+## Object behaviors
 
-Objects in activities and destinations carry authored behavior programs. A program runs on the
-client, with no server or wire trigger. The object's own per-frame update starts it once the object
-exists.
+Placed objects carry behavior programs that run on the client. How they start, their node types
+and their object filters are on [Behaviors](/docs/destiny-2/behaviors/#object-behaviors).
 
-Behavior is object-scoped. There is no behavior field on an activity itself; it is always on a
-placed object inside the activity or destination. The shipped programs cover strike, raid and
-public-event mechanics, abilities and status effects. They are the client half: animation, effects,
-local status, conditions and local spawns. The encounter sequence is host policy.
+## Action kinds
 
-### How a program starts
-
-Components do not post a "run behavior" message. The engine calls a fixed method slot on the
-component class. Each class has a table of 16-byte records:
-
-```c
-struct ClassMessageRecord {  /* 16 bytes */
-    void    *handler;        /* +0x00 */
-    uint32_t msg_id;         /* +0x08  hash; not compared on dispatch */
-    uint16_t argc;           /* +0x0C */
-    uint16_t flags;          /* +0x0E */
-};
-```
-
-A bound method is `{class, slot index, target}`. Dispatch reads `table[slot]`. The message id is
-never compared, so one table can hold the same id twice.
-
-Two ids are known: `0x67774671` is construct and `0x3088896A` is destruct.
-
-```c
-void Object_Update(Object *o)
-{
-    /* bound methods set from the authored definition at construct */
-    for (BoundMethod *m : o->update_methods) {
-        ClassMessageRecord *r = &class_table(m->cls)[m->slot];
-        r->handler(resolve(m->target));
-    }
-}
-
-/* One submitter: a timeline behavior */
-void TimelineBehavior_Update(Component *c)
-{
-    float t = now() - c->start_time;               /* stamped at construct */
-    for (Threshold *th : c->def->thresholds)
-        if (crossed(th, t))
-            BehaviorRoot_Execute(th->root, c);
-}
-```
-
-Which slot submits depends on the component subtype. Of 30 subtypes in the shipped programs, 13
-submit, 16 are passive config holders, and 1 is not verified. A program on a passive subtype never
-runs through that path.
-
-A program also runs when a state variable changes. A state-variable commit runs every program row
-whose value range contains the new value.
-
-### What stops a program running
-
-| stage | what refuses |
-|---|---|
-| spawn | the object was never spawned |
-| construct | a component fails and the whole object is dropped |
-| submit | the component subtype has no submitting slot |
-| condition | the condition's input channel has no producer |
-| interaction | the interaction eligibility check refuses |
-
-### Inputs are object-local channels
-
-A condition reads a named `float4` channel on an object, found by name hash. The packages ship the
-designer's source text beside each node, for example:
-
-```text
-light_mote_value > 9
-dark_mote_value + 1
-```
-
-Each identifier hashes (FNV-1, 32-bit) to the variable id the program uses.
-
-Global gameplay switches do not feed these channels. The known server route is the
-`combatant_sensor` slot's Auth body. It carries up to 16 `{channel hash, float}` rows, and the
-client writes them into the actor's channels.
-
-### Behavior node types
-
-A program is a tree of nodes. The engine registers 27 node types.
-
-| node | what it does |
-|---|---|
-| `add_hop_on` | creates one object per target from a spawn entry |
-| `channel_link` | links two objects and attaches them at named nodes |
-| `counter` | writes a clamped integer; runs programs whose range covers the new value |
-| `defer` | runs its children with the same context |
-| `exit_seat` | queues a seat-exit record on linked objects |
-| `external` | runs another object's element list |
-| `filter` | splits targets into pass and fail sets by its conditions |
-| `global` | builds a target list from all players and/or all actors |
-| `incident` | posts an incident |
-| `investment_unlock_flag` | branches on an account unlock flag |
-| `kill` | destroys the target |
-| `navpoint` | posts a navpoint record |
-| `player_custom_interaction` | submits action kind 70 per target |
-| `player_custom_interaction_extended` | the same, with a candidate list |
-| `redirect` | rebinds the context, then runs children |
-| `relative_teleportation` | moves an object by a relative transform |
-| `remove_hop_on` | attaches a pooled record; name not confirmed by its code |
-| `resource` | queues a resource change |
-| `search` | spatial query; feeds found objects to children |
-| `select` | scores and sorts targets; top n run one branch, the rest another |
-| `spawn` | spawns one object per target |
-| `spawn_projectile` | spawns, aimed at a second object |
-| `spawn_random` | spawns at a random, checked position |
-| `storage_channel` | writes an expression result into a named channel |
-| `target` | adds, removes, clears or iterates a target roster |
-| `timer` | creates a keyed pooled record; name assumed |
-| `town_presence` | writes one byte into a per-player structure |
-
-Each registry row carries a flag. With the flag set, the dispatcher first drops targets whose
-object slot is not allocated, caps the list at 32, and passes the result. Eight types manage their
-own targets and take the raw list: `external`, `filter`, `global`, `incident`, `redirect`,
-`relative_teleportation`, `search` and `select`.
-
-```c
-void BehaviorNode_Dispatch(NodeType *t, void *payload, Context *ctx)
-{
-    if (!t->prefilter)
-        return t->invoke(payload, ctx);
-
-    Context c = *ctx;
-    c.count = 0;
-    for (uint32_t id : ctx->ids)
-        if (SObject_SlotAllocated(id) && c.count < 32)
-            c.ids[c.count++] = id;
-    t->invoke(payload, &c);
-}
-```
-
-### Action kinds
-
-`player_custom_interaction` builds an 80-byte action request with byte 0 set to 70. Byte 0 is the
-action kind. The engine has 120 action kinds, 0 to 119, covering the whole player and AI action
-surface. A few:
+An action request is 80 bytes. Its byte 0 is the action kind. The behavior node
+`player_custom_interaction` sends kind 70. The engine has 120 action kinds, 0 to 119, covering the
+whole player and AI action surface. A few:
 
 | kind | action |
 |---:|---|
@@ -399,54 +266,20 @@ surface. A few:
 | 106 | `player_locomotion` |
 | 108 | `physics_driven_ai_locomotion` |
 
-The names come from the console build's registry. On PC, only kind 70 is checked against the
-code. Several kinds share one implementation. These action kinds are not the actor command
-selectors. No mapping between the two is known.
+Only kind 70 is verified in the PC code. Several kinds share one implementation. These action kinds
+are not the actor command selectors. No mapping between the two is known.
 
-### Object filters
+## Temperaments
 
-The `filter` node holds a list of conditions. There are 21 condition types: 19 leaf filters and two
-that nest.
+An actor's behavior variant comes from a set of up to six temperament ids. The client merges it
+from the actor, its squad, gameplay switches, the package definition, the active behavior context and
+the `combatant_sensor` Auth body. Each id is looked up in a table owned by the actor's behavior
+definition. The matching row picks native behavior states, and a change rebuilds the active state.
 
-| filter | filter | filter |
-|---|---|---|
-| `activity_flag` | `dead` | `object_label` |
-| `actor` | `distance` | `object_type` |
-| `airborne` | `faction` | `player` |
-| `channel` | `faction_relationship` | `resource` |
-| `has_parent` | `hop_on` | `same_object` |
-| `damage_owner` | `line_of_sight` | `scoreboard_stat` |
-| `team_side` | `composite` | `external` |
-
-`channel` is verified from its code. The other leaf names are assumed from registration order,
-with six supported by what their code does.
-
-`composite` holds a nested list, which is how AND and OR trees nest. `external` evaluates another
-object's list.
-
-```c
-struct PredicateList {
-    uint8_t  mode;         /* +0x00  0 = AND, 1 = OR */
-    uint8_t  pad[7];
-    uint64_t count;        /* +0x08 */
-    int64_t  elems_rel;    /* +0x10  self-relative, 16-byte elements */
-};
-
-bool ObjectFilter_EvaluateList(PredicateList *l, Context *ctx)
-{
-    if (l->count == 0)
-        return true;       /* an empty list is true */
-    for (uint64_t i = 0; i < l->count; i++) {
-        bool r = evaluate(element(l, i), ctx);
-        if (l->mode == 0 && !r) return false;
-        if (l->mode == 1 &&  r) return true;
-    }
-    return l->mode == 0;
-}
-```
-
-`channel` compares two expressions with one of six operators: equal within 0.001, not equal, `<=`,
-`>=`, `<`, `>`.
+Two writers change the set at run time: a client atom in the `combatant_sensor` program, and a
+packaged action that adds or removes one id. All 121 installed packaged actions remove; none adds.
+The installed ids are 0 to 12 and 14. No id has a known name, so none can be called neutral or
+hostile. No damage, hit, health or faction code writes the set.
 
 ## The authored squad spawner
 
@@ -509,7 +342,7 @@ struct SquadAuth {              /* 196 bytes; widths inferred from the offsets *
     ObjectSlotRef rule_ref[2];  /* +0x98  overrides the package rule */
     int32_t  objective_rev;     /* +0xA8 */
     int32_t  awareness_rev;     /* +0xAC */
-    int32_t  unknown_b0;        /* +0xB0  purpose not verified */
+    int32_t  unknown_b0;        /* +0xB0  purpose unverified */
     int32_t  objective_group;   /* +0xB4  -1 = no objective */
     int32_t  dest_rev;          /* +0xB8 */
     uint8_t  active;            /* +0xBC */
@@ -566,17 +399,84 @@ The alive count is recomputed on each report by checking each member's handle. T
 event in this build. The host sees a death only as a fall in the alive count, with no member
 identity and no cause.
 
+A bound actor's `combatant_sensor` Sense also reports its primary and secondary damage-pool
+fractions, as seven-bit values from 0 to 1. A fraction below one shows the actor took damage. It
+carries no attacker or cause, and a small hit can leave the quantized value unchanged. The object
+sensor slot reports a per-object spawn and death on its own Sense; see
+[The Activity Host protocol](/docs/destiny-2/activity-host-protocol/).
+
+## Class definitions
+
+Every placed object, actor and player is built from a class definition, a package tag of class
+`0x80809C0F`. The install holds 46,235. A class definition lists its component configs and carries
+a hash map of the component definition hashes it holds. Looking up a component on an object asks
+each node of the object's class chain whether its map holds the hash. The first match wins.
+
+`classDef + 8` is the FNV-1 hash of the class's internal name, such as `fallen_vandal`. Most class
+definitions have none and read `0x811C9DC5`.
+
+### Object types
+
+The byte at `classDef + 150` is an object type. The 29 type names are the engine's own:
+
+| type | name | type | name |
+|---:|---|---:|---|
+| 0 | `inherited` | 15 | `vehicle` |
+| 1 | `static_mesh` | 16 | `turret` |
+| 2 | `prop_simple_DEPRECATED` | 17 | `emitter` |
+| 3 | `prop_expensive_DEPRECATED` | 18 | `projectile` |
+| 4 | `prop_cosmetic_static` | 19 | `item` |
+| 5 | `prop_cosmetic_movable` | 20 | `item_ammo` |
+| 6 | `prop_cosmetic_movable_garbage` | 21 | `item_loot` |
+| 7 | `prop_networked_static` | 22 | `gear` |
+| 8 | `prop_networked_movable` | 23 | `hop_on` |
+| 9 | `prop_cinematic` | 24 | `hop_on_gear_biped` |
+| 10 | `speedtree` | 25 | `hop_on_gear_weapon` |
+| 11 | `interactive` | 26 | `hop_on_gear_ship` |
+| 12 | `biped` | 27 | `hop_on_gear_sparrow` |
+| 13 | `creature` | 28 | `system` |
+| 14 | `weapon` | | |
+
+### The player classes
+
+Only three player class definitions exist: `player_guardian`, `player_hunter` and `player_warlock`.
+There is no `player_titan`. The character's class byte reaches a class definition through two
+`investment_globals` tables:
+
+| class byte | class | class definition |
+|---:|---|---|
+| 0 | `titan` | `player_guardian` |
+| 1 | `hunter` | `player_hunter` |
+| 2 | `warlock` | `player_warlock` |
+
+So `player_guardian` is the Titan's class, not a shared base. All three carry the ability container
+and 61 or 62 components, far more than any other class. The class byte is server data, in the
+character record.
+
+### Combatant display names
+
+An enemy's display name, such as "Vandal" or "Taken Knight", is not in the investment tables. It
+comes from the class definition: the combatant component's config references a record of class
+`0x8080815F`, whose `+0x08` is a localized string hash. 354 such records exist and 128 distinct names
+resolve, covering the ordinary roster and bosses such as "Nightmare of Crota, Son of Oryx". A
+record's hash resolves without a string bank, so a hash that two containers use stays ambiguous. The
+record has no known race or faction field.
+
 ## Open questions
 
 - Names for the 98 command selectors.
-- Most of the actor group's class-message slots; 20 of 24 are not read.
-- The submitting slot of one behavior subtype whose handlers do not decompile.
+- Most of the actor group's class-message slots. 20 of 24 are unknown.
 - The native binding behind a spawn point and its lifetime.
-- How the retail host set a guard's "neutral until attacked" state.
+- How the retail host sets a guard's "neutral until attacked" state, and what each temperament id
+  means.
 
 ## Related pages
 
+- [Behaviors](/docs/destiny-2/behaviors/) -- the programs placed objects run.
 - [The Activity Host protocol](/docs/destiny-2/activity-host-protocol/) -- slot types, Auth and
   Sense.
 - [Activities and destinations](/docs/destiny-2/activities-and-destinations/) -- where the placed
   objects live.
+- [World geometry and collision](/docs/destiny-2/world-geometry-and-collision/) -- entity physics,
+  hitboxes and damage parts.
+- [Enemies and NPCs](/docs/sunrise-studio/enemies/) -- viewing and editing enemies in Sunrise Studio.

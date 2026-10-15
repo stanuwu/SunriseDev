@@ -1,6 +1,6 @@
 ---
 title: "How a script runs"
-date: 2026-09-17
+date: 2026-10-15
 description: "Callbacks, transactions, faults, limits, the sandbox and what survives a reload."
 weight: 30
 ---
@@ -37,7 +37,9 @@ Rules:
 - `spawn_set_hash` names the authored spawn points the client filters its spawn by. It answers the
   arrival and every later host move into a slice set of the bubble that declares the set. Without
   it the client scores every loaded point named `default` and can land anywhere on the map. The
-  generated SDK carries no spawn sets, so the hash is written out.
+  generated SDK carries no spawn sets, so the hash is written out. A spawn set picked by hand at
+  launch wins over it.
+- `omit` lists up to 32 slots. Their objects stay out of every seed the mission selects.
 
 ## Event callbacks
 
@@ -58,6 +60,7 @@ Rules:
 | `on_event_ghost_link_state` | a Ghost scan level changed |
 | `on_event_actor_path_state` | an actor's program or movement level changed |
 | `on_event_scene_finished` | an authored scene reported it finished |
+| `on_event_scene_output` | an authored scene reported one of its `mission.SceneOutput` triggers |
 | `on_event_objective_progress` | an objective task counter rose |
 | `on_event_cinematic_started` | a cinematic started |
 | `on_event_cinematic_terminated` | a cinematic ended, or its start was refused |
@@ -72,14 +75,15 @@ Rules:
 | `on_event_incident_received` | the client sent an incident; low level |
 | `on_event_client_message_received` | the client sent another routed message; low level |
 | `on_event_scriptable_override_transport_staged` | any request body reached the network queue; low level |
+| `on_event_auth_state_transport_staged` | a host lifetime-state body reached the network queue; low level |
+| `on_event_incident_transport_staged` | a host incident body reached the network queue; low level |
 
 The fields of each event are in [Lua API reference](/docs/mission-scripting/lua-api/).
 
-Some kinds exist in the enum but never reach a script today: `auth_state_committed`,
-`auth_state_transport_staged`, `auth_state_canceled`, `incident_queued`,
-`incident_transport_staged`, `incident_canceled`, `incident_refused`,
-`scriptable_override_committed`, `scriptable_override_canceled` and `operator_refused`. Do not
-write callbacks for them.
+Some kinds exist in the enum but never reach a script: `auth_state_committed`,
+`auth_state_canceled`, `incident_queued`, `incident_canceled`, `incident_refused`,
+`scriptable_override_committed`, `scriptable_override_canceled` and `operator_refused`. They
+carry no client generation, so the runtime drops them. Do not write callbacks for them.
 
 ### The first report
 
@@ -90,6 +94,7 @@ on the next change.
 |---|---|
 | `trigger_entered`, `trigger_exited` | silent |
 | `scene_finished` | silent |
+| `scene_output` | silent; each output raises once per scene run, and a new activation token starts a run |
 | `objective_progress` | silent |
 | `entity_died` | silent |
 | `squad_state` | fires |
@@ -98,13 +103,15 @@ on the next change.
 | `object_state` | fires once the object's generation and state are known |
 | `damage_state`, `ghost_link_state`, `actor_path_state` | fire once the level is complete |
 
-A new attempt clears these records, so the first report after a restart follows the same rules.
+A new attempt clears these records, so the first report after a restart follows the same rules. A
+new client generation clears them too, for example when the client rebuilds its activity.
 
 ## Loading
 
 ```c
 /* What happens when an activity attaches. */
-source = read_file("scripts/<stem>/<stem>.lua");
+source = read_file_from_loaded_mods("scripts/<stem>/<stem>.lua");  /* last loaded mod first */
+if (!source) source = read_file("scripts/<stem>/<stem>.lua");
 if (!source) source = read_file("scripts/activities/a_<index>_<hash>.lua");
 if (!source) { log("open no_script"); return; }
 
@@ -124,18 +131,21 @@ if (mission_already_started) {
 }
 ```
 
+- A mod's script replaces the base script of the same name. See [Mods](/docs/sunrise/mods/).
+- A UTF-8 byte order mark at the start of the main file is ignored.
 - The top-level code runs once per open. `require` calls happen here.
 - The top-level code has a budget of 100 million instructions, so large generated modules load.
 - Client reports that arrive before the start are kept and delivered after `on_start`.
 
 ## The script file name
 
-The runtime builds a file stem from the activity's internal name:
+The runtime builds a file stem from the activity's internal name, or from its display name when the
+activity has no internal name:
 
 ```c
 /* Folding "Mission Deadzone-2" gives "mission_deadzone_2". */
 stem = lowercase(name);
-stem = replace_runs_of_non_alphanumeric(stem, "_");
+stem = replace_runs_of_non_alphanumeric(stem, "_");   /* none at the start or the end */
 if (stem is empty) stem = "unnamed";
 if (stem starts with a digit) stem = "_" + stem;
 path = "scripts/" + stem + "/" + stem + ".lua";
@@ -180,7 +190,9 @@ After a fault:
 - No more callbacks run for this mission.
 - The log gets a warning with the Lua error text.
 - The "Script" page and the Mission Script HUD overlay show the error.
-- Reopening the same state faults again. Only the "Reload script" button clears the fault.
+- Reopening the same state faults again. Only a script reload clears the fault, and only once the
+  mission has started. A fault in the top-level code or in `on_start` needs a new launch of the
+  activity.
 
 `pcall` works as usual for your own errors, but an instruction or memory overrun cannot be caught.
 
@@ -245,12 +257,44 @@ Rules that follow:
 - Constant tables built at the top of the file are fine. The top-level code runs again on every
   open.
 
+### A script reload
+
+**Reload script** on the Script page, or **Update running game** in Sunrise Studio, asks for a
+script reload. The running program keeps going until its replacement is ready.
+
+```c
+/* One reload request. */
+targets = programs_named_by(request);   /* started programs: all, or one mod's */
+for (each target) {
+    source = read_script(target);       /* the same lookup as Loading */
+    compile_and_run_top_level(source);  /* in a new Lua state */
+}
+wait_until_safe(targets);               /* no request, client report, timer or event in flight */
+for (each target) {
+    restore_mission_state();            /* variables, timers and phase */
+    call(program.on_load);              /* in the new state, before the swap */
+}
+swap_all(targets);                      /* all programs together, or none */
+```
+
+- **Reload script** reloads every started program. **Update running game** reloads the started
+  programs of that mod: its scripts, programs that loaded one of its files, and the mods that
+  depend on it.
+- If any target fails, no program is replaced. The old programs keep running, and the request
+  answers with the first error.
+- A mission that never started is skipped. It keeps its old program until you launch it again.
+  When no started mission is left, the answer is "no started mission uses this script".
+- A reload clears a fault, unless the faulted state still holds requests that were never
+  delivered.
+- Library modules load again too, because the new Lua state starts empty.
+- When `on_load` changes the phase, `phase_entered` fires after the swap.
+
 ## Order of events
 
 - Client reports are delivered in the order the client sent them.
 - One client packet can raise several events. The report callback runs first, then the events
-  derived from it, in this order: trigger, Ghost link, object, damage monitor, actor path, squad,
-  combatant damage, device, scene, objective.
+  derived from it, in this order: fireteam, trigger, Ghost link, object, damage monitor, actor
+  path, squad, combatant damage, device, scene, objective.
 - An incident raises `player_trigger`, then the cinematic events.
 - A state report raises `region_changed` after the report itself.
 

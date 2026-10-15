@@ -1,12 +1,16 @@
 ---
 title: "Lua API reference"
-date: 2026-09-17
+date: 2026-10-15
 description: "Every call a mission script can make, and every field an event carries."
 weight: 40
 ---
-This is the full list of what a mission script can call and read. It matches the runtime in
-`server/activity/mission/mission_script_lua_*.cpp`. The live SDK views (`context.sdk.catalog`,
-`world`, `manifest`) have their own page, [The live SDK views](/docs/mission-scripting/live-sdk-views/).
+This is the full list of what a mission script can call and read. One table in the Sunrise source,
+`server/activity/mission/mission_api.h`, declares every member, argument and event field. The
+runtime dispatches from that table, and the generator writes it out as `sunrise/mission_api.json`;
+see [The generated SDK modules](/docs/mission-scripting/generated-sdk/).
+
+The live SDK views (`context.sdk.catalog`, `world`, `manifest`, the row collections and the bounded
+lanes) have their own page, [The live SDK views](/docs/mission-scripting/live-sdk-views/).
 
 ## How to read this page
 
@@ -54,9 +58,24 @@ The first argument of every callback.
 | `attempt_generation` | string | current attempt, decimal |
 | `mission_complete` | boolean | true after `complete_mission` was accepted in this attempt |
 | `lifetime` | lifetime handle | see "Lifetime" |
+| `mod_config` | mod config handle | see "Mod config" |
 | `peers` | peer collection | see "Peers" |
 | `timers` | timer name collection | see "Name references" |
 | `variables` | variable name collection | see "Name references" |
+
+### Mod config
+
+`context.mod_config` holds the config of the mod that supplied the script.
+
+`context.mod_config.<key>` returns the current value of one entry the mod declares in its
+`mod.json`. An `int` entry reads as an integer, a `float` entry as a number and a `bool` entry as a
+boolean. An undeclared key reads as nil, and so does every key in a base or generated script. The
+value is read at each access, so a change on the Mods page applies at once. The handle is
+read-only.
+
+```lua
+local respawn = context.mod_config.respawn_ms or 5000
+```
 
 ### Lookups
 
@@ -67,8 +86,8 @@ The first argument of every callback.
 | `context:scene(selector)` | scene handle | selector is a `mission.Scene` id string or a scene row number |
 | `context:cohort{squads = list}` | cohort handle | see "Cohort" |
 
-An unknown selector is an error: "unknown or ambiguous activity slot". Pass the id string, not a
-handle.
+Row numbers start at 1. Pass the id string or the row number, not a handle. An unknown selector is
+an error, for example "unknown or ambiguous activity slot".
 
 ### Mission state
 
@@ -76,7 +95,7 @@ handle.
 |---|---|---|
 | `context:set_variable(name, value)` | nothing | value is a boolean, integer, finite number or string up to 127 bytes |
 | `context:clear_variable(name)` | boolean | true when the variable existed |
-| `context:start_timer(name, ms)` | string | the timer sequence; replaces a timer with the same name |
+| `context:start_timer(name, ms)` | string | the timer sequence; ms is 0 to 4294967295; replaces a timer with the same name |
 | `context:cancel_timer(name)` | boolean | true when the timer existed |
 | `context:set_phase(n)` | nothing | n is 0 to 4294967295; a change raises `phase_entered` |
 
@@ -88,7 +107,7 @@ A name is 1 to 63 bytes of letters, digits, `_`, `-`, `.` and `/`. `nil` is not 
 | method | arguments | notes |
 |---|---|---|
 | `context:select_state(state, options)` | `state`: a `mission.states` row; `options`: see below | load another authored state; moves the player when needed |
-| `context:activate_objects{slots, active}` | `slots`: list of type-4 slots; `active`: default true | returns a **list** of request keys, one per object group |
+| `context:activate_objects{slots, active}` | `slots`: list of type-4 slot ids or handles, each once; `active`: default true | returns a **list** of request keys, one per object group |
 | `context:complete_mission{}` | none | completes this attempt; errors when already complete |
 | `context:hold_spawn{active}` | `active`: required boolean | hold the player's spawn, or release it |
 | `context:restart_checkpoint{region, spawn_set_hash, release_request}` | see below | wipe and restart the party |
@@ -96,21 +115,25 @@ A name is 1 to 63 bytes of letters, digits, `_`, `-`, `.` and `/`. `nil` is not 
 A held spawn keeps the roster's spawn gate closed, so the player has no body yet. Use it when the
 mission opens on a cutscene. Release it with `active = false` when the player should arrive.
 
-`select_state` options is either a plain list of type-4 slots to keep out of the seed, or a table
-with:
+`select_state` options is either a plain list of slots whose objects stay out of the seed, or a
+table with:
 
 | key | type | meaning |
 |---|---|---|
-| `[1]`, `[2]`, ... | slot ids | objects to keep out of the new state's seed; up to 32 |
+| `[1]`, `[2]`, ... | slot ids | each slot's object stays out of the new state's seed; up to 32 |
 | `retire_placed_props` | boolean | end the map props captured from the old state before the move |
+
+Any other named key is an error.
 
 `restart_checkpoint` arguments:
 
 | key | type | meaning |
 |---|---|---|
 | `region` | integer 0 to 1022 | the region the party is in |
-| `spawn_set_hash` | integer | the authored spawn set to restart at |
-| `release_request` | string | the `value` of the arming request; releases the wipe |
+| `spawn_set_hash` | integer 1 to 4294967294 | the authored spawn set to restart at |
+| `release_request` | decimal string, optional | the `value` of the arming request; releases the wipe |
+
+`region` and `spawn_set_hash` are required, also on a release.
 
 Arming is refused unless the activity is private, the whole party is dead, the party is in
 `region`, and the spawn set exists. An accepted arm starts a new attempt. See "Wipe and restart at
@@ -174,21 +197,22 @@ Every method below returns a RequestKey unless the table says otherwise.
 
 | method | slot type | arguments |
 |---|---|---|
-| `set_object_active{active, with}` | 4 | `active` default true; `with`: up to 63 more type-4 slots sent together |
+| `set_object_active{active, with}` | 4 | `active` default true; `with`: up to 63 more type-4 slot ids, not handles, sent together |
 | `set_interactable_object{active, used, track_owner}` | 4 | `active` default true; `used` default false; `track_owner` default false |
 | `watch_damage{target}` | 20 | `target`: a type-4 slot handle |
 | `set_object_filter{players, target, inside, inside_any}` | 34 | see below |
-| `set_occupancy_condition{value, filter}` | 30 | `value`: int32; `filter`: optional slot handle |
-| `set_darkness_zone{enabled, wipe_seconds}` | 35 | `enabled` default false; `wipe_seconds` -1 (none) to 3; a countdown needs `enabled` |
+| `set_occupancy_condition{value, filter}` | 30 | `value`: int32; `filter`: optional slot handle; without it the client measures its default player set |
+| `set_darkness_zone{enabled, wipe_seconds}` | 35 | `enabled` default false; `wipe_seconds` -1 (none) to 3, default -1; a countdown needs `enabled` |
+| `generate_map{record, seed, mode, anchors, enabled, values, reals, state_key}` | 37 | see below |
 | `set_music_section{section, enabled}` | 11 | `section` 0 to 127; `enabled` default true |
 | `set_ghost_link{active}` | 65 | `active` default true |
-| `ghost_link()` | 65 | returns `{generation, progress, active}` or nil; not a request |
+| `ghost_link()` | 65 | returns `{generation, progress, active}`, or nil until the client reported all three; not a request |
 | `transition{transition, snap}` | 23 | `transition` from `context.sdk.device_transitions`; `snap` default false |
-| `set_channel{channel, value, snap}` | 23 | `channel` from `context.sdk.device_channels`; `value` from `context.sdk.unit(x)` |
+| `set_channel{channel, value, snap}` | 23 | `channel` from `context.sdk.device_channels`; `value` from `context.sdk.unit(x)`; `snap` default false |
 | `applied{channel}` | 23 | returns boolean; not a request |
 | `fire_trigger()` | 31 | arms the trigger |
 | `disarm_trigger()` | 31 | stops it reporting |
-| `set_directive{directive, state, navpoint, waypoint, audience}` | 68 | see below |
+| `set_directive{directive, state, navpoint, waypoint, audience, progress}` | 68 | see below |
 | `clear_directives()` | 68 | hides the goal |
 | `set_public_event_state{area, leave_seconds, state, player}` | 71 | see below |
 | `play_sequence()` | 5 | plays the authored sequence |
@@ -198,7 +222,7 @@ Every method below returns a RequestKey unless the table says otherwise.
 | `reset_objectives()` | 3 | resets every task of the objective |
 | `advance_task()` | 38 | advances the authored task bit |
 | `play_performance{state}` | 42 | `state`: a `mission.PerformanceState` entry; may be left out when the target has one state |
-| `play_dialogue_cue{cue, filter}` | 53 | `cue` 0 to 65535; `filter`: optional type-60 slot handle |
+| `play_dialogue_cue{cue, filter}` | 53 | `cue` 0 to 65535, a `mission.DialogueCue` value; a cue past the sensor's cue count is refused; `filter`: optional type-60 slot handle |
 | `assign_combat_objective{objective, task_group, reconsider, reserved, refresh_player_awareness}` | 1 | see below |
 | `run_atoms{atoms, spawn}` | 2 | see "Atom programs" |
 | `play_actor_path{path, spawn}` | 2 | `path`: a type-58 slot on the same object |
@@ -226,13 +250,41 @@ Every method below returns a RequestKey unless the table says otherwise.
 | `navpoint` | type-47 slot handle | map marker target |
 | `waypoint` | type-60 slot handle | volume where the marker hides |
 | `audience` | type-70 slot handle | engagement sensor for the mission banner |
+| `progress` | list of 1 to 4 int32 values | counter values, for example `{current, maximum}` |
+
+`progress` works only on a directive whose entry has `counter = true`. On any other directive it is
+an error, because the HUD would ignore the values.
+
+### `generate_map`
+
+Call it on a type-37 map generator slot. The body holds two generator records. The call writes one
+of them. Every field you leave out keeps its authored value. The exception is `state_key`, which
+defaults to 0.
+
+| key | type | meaning |
+|---|---|---|
+| `record` | 1 or 2 | which record to write; default 1 |
+| `seed` | integer up to 4294967295 | the generator seed; a negative value keeps the authored seed |
+| `enabled` | boolean | turns the record on or off |
+| `mode` | integer -128 to 127 | raw mode byte |
+| `anchors` | list of exactly 4 tables | each `{first, second, value, enabled}`; `first` and `second` are -128 to 127 |
+| `values` | list of up to 5 int32 | raw integer inputs; -1 in the first two keeps the authored value |
+| `reals` | list of up to 2 numbers | raw number inputs |
+| `state_key` | integer 0 to 4294967295 | default 0 |
+
+The meaning of `mode`, `anchors`, `values` and `reals` is not known yet. The existing scripts send
+only `seed` and `enabled`:
+
+```lua
+context:slot(Slot.MAP_GENERATOR_SENSOR):generate_map{seed = 12345, enabled = true}
+```
 
 ### `set_public_event_state`
 
 | key | type | meaning |
 |---|---|---|
 | `area` | slot handle | the object whose zone bounds the event area; required |
-| `leave_seconds` | number 0 or more | seconds outside the area before the client reports it; required |
+| `leave_seconds` | finite number 0 or more | seconds outside the area before the client reports it; required |
 | `state` | int32 | shown by the HUD; default 0 |
 | `player` | decimal string | the watched player; default `context.player_key` |
 
@@ -243,7 +295,7 @@ Call it on the squad's type-1 slot.
 | key | type | meaning |
 |---|---|---|
 | `objective` | type-3 slot handle | required; must be in the same registry as the squad |
-| `task_group` | a `mission.TaskGroup` entry | which task group to use; default none |
+| `task_group` | a `mission.TaskGroup` entry | which task group to use; must belong to `objective`; default none |
 | `reconsider` | boolean | force the squad to pick again; default false |
 | `reserved` | boolean | reservation flag; left out keeps the current reservation |
 | `refresh_player_awareness` | boolean | default false |
@@ -260,7 +312,7 @@ revision, so the host can reject a stale change.
 | `row`, `id`, `name` | | identity |
 | `member_count` | integer | members in the squad |
 | `default_counts` | list | authored count per member |
-| `anchors` | collection | spawn points as world rows; see [The live SDK views](/docs/mission-scripting/live-sdk-views/) |
+| `anchors` | collection or nil | spawn points as world rows; nil when the world is stale; see [The live SDK views](/docs/mission-scripting/live-sdk-views/) |
 | `counts()` | count vector | a new vector filled with the defaults |
 | `place{counts, mode, spawn_rule, retire_on_return}` | RequestKey | spawn the squad |
 | `actor_command{command, value}` | RequestKey | send one command to every live member |
@@ -281,7 +333,7 @@ A count vector from another squad is an error.
 | member | meaning |
 |---|---|
 | `count` | number of members |
-| `capacity` | 15 |
+| `capacity` | 8; `counts()` errors on a squad with more members |
 | `at(i)` | count of member `i`, from 1 |
 | `set(i, n)` | set member `i` to `n`, 0 or more |
 
@@ -296,7 +348,7 @@ squad:place{counts = counts, mode = context.sdk.squad_modes.replace}
 
 | key | type | meaning |
 |---|---|---|
-| `command` | integer | a `mission.ActorCommand` value |
+| `command` | integer 0 to 4294967295 | a `mission.ActorCommand` value |
 | `value` | int32 | the command value, for example a `mission.Faction` value |
 
 ## Scene
@@ -304,15 +356,20 @@ squad:place{counts = counts, mode = context.sdk.squad_modes.replace}
 | member | returns | meaning |
 |---|---|---|
 | `row`, `id` | | identity |
-| `activate{spawn}` | RequestKey | start the scene; `spawn = true` also spawns its authored cast |
+| `activate{spawn}` | RequestKey | start the scene; `spawn = true` also spawns its authored cast; default false |
 | `stop{}` | RequestKey | stop the running scene |
-| `send_event{key}` | RequestKey | send a signal; `key` is 1 to 4294967294 |
+| `send_event{key}` | RequestKey | fire one input of the running scene; `key` is a `mission.SceneInput` entry, 1 to 4294967294 |
+
+A `key` that no block of this scene waits on is refused: the `effect_result` outcome is
+`refused`, and the log names `unknown_event`. Take `key` from this scene's own `mission.SceneInput`
+entries.
 
 `activate{spawn = true}` errors when the scene has no single authored cast.
 
 ## Cohort
 
-A cohort is a read-only view of up to 64 squads.
+A cohort is a read-only view of 1 to 64 squads. `squads` takes squad ids or squad handles, each
+once.
 
 ```lua
 local group = context:cohort{squads = {mission.Squad.SQ_A, mission.Squad.SQ_B}}
@@ -338,7 +395,7 @@ placement is delivered and the client has reported the squad.
 
 | member | meaning |
 |---|---|
-| `at(n)` | state `n`, 0 to 10 |
+| `at(n)` | state `n`, 0 to 10; its `value` is `n` |
 | `default` | state 3 |
 | `count` | 11 |
 
@@ -356,32 +413,21 @@ placement is delivered and the client has reported the squad.
 A peer has `session_id`, `session_generation`, `member_key` and `join_identity`, all decimal
 strings.
 
+A peer handle follows its session, even when the list order changes. After that session leaves,
+reading the handle is an error: "peer session is no longer in the published set".
+
 ## Name references
 
 `context.timers:resolve(name)` and `context.variables:resolve(name)` check a name and return a
-handle with a `name` field. `capacity` gives the store size (32 and 512). They only check names; no
+handle with a `name` field. `capacity` gives the store size (32 and 512). They only check names. No
 request takes them yet.
 
 ## Value types
 
-| maker | makes | used by |
-|---|---|---|
-| `context.sdk.unit(x)` | a channel value with fields `value`, `low` (0), `high` (1) | `set_channel` |
-| `context.sdk.position(x, y, z)` | a world position with fields `x`, `y`, `z`; all finite | nothing yet |
-| `context.sdk.device_channels.position` / `.power` / `.lock` | a channel with `name` and `value` | `set_channel`, `applied` |
-| `context.sdk.device_transitions.<name>` | a transition with `name`, `channel`, `value` | `transition` |
-| `context.sdk.squad_modes.<name>` | a mode with `name` and `value` | `place` |
-
-The six transitions:
-
-| name | channel | value |
-|---|---|---|
-| `open` | position | 1 |
-| `close` | position | 0 |
-| `power_on` | power | 1 |
-| `power_off` | power | 0 |
-| `lock` | lock | 1 |
-| `unlock` | lock | 0 |
+Device channels, device transitions, squad modes, lifetime states, `context.sdk.unit(x)` and
+`context.sdk.position(x, y, z)` make the values that `set_channel`, `transition`, `place` and
+`context.lifetime:set` take. [Vocabularies](/docs/mission-scripting/live-sdk-views/#vocabularies)
+lists each one, its fields and the six transitions.
 
 ## Actor sequences
 
@@ -390,7 +436,7 @@ The six transitions:
 | member | meaning |
 |---|---|
 | `count` | number of sequences |
-| `at(n)` | sequence `n`, or nil |
+| `at(n)` | sequence `n`, from 1, or nil |
 | `<SYMBOL>` | the sequence with that symbol, or nil |
 | `KEY_<8 hex>` | the sequence with that key hash, or nil |
 
@@ -420,14 +466,18 @@ to 32 atoms. Each atom is a table with a `kind`. `context.sdk.atom_kinds` holds 
 | `sequence` | `value` | play a sequence by number |
 | `sleep` | `seconds` | wait |
 | `trivial` | none | an empty step |
-| `control_flag` | `value` 0 to 63 | set a control flag |
+| `control_flag` | `value` 0 to 63, default 0 | set a control flag |
 | `set_temperament` | `value`, `enabled` | set a temperament |
 | `set_channel` | `channel`, `value` | set an actor channel to a number |
 | `ability` | `ability`, `target` | use a `mission.ActorAbility` entry of this actor |
 
 - `target` is a slot handle. `value` on `face`, `snap_to` and `move_to` is an authored point number
-  of that target, 0 to 255. An unknown point is an error.
+  of that target, 0 to 255, default 0. An unknown point is an error.
+- `value` on `sequence` and `set_temperament`, and `channel` on `set_channel`, are 0 to 4294967295.
+  `seconds` and the `set_channel` `value` are finite numbers.
+- `enabled` defaults to false. Any value other than nil or false counts as true.
 - An `ability` must belong to this actor. Its optional `target` must have an authored point 0.
+- An `ability` atom refuses unknown fields. The other kinds ignore them.
 - Any atom may add `quantized`, 0 to 2047.
 - `spawn = true` creates the actor from its authored source first. It errors when the actor has no
   single authored source.
@@ -442,12 +492,13 @@ Every event has these fields:
 
 | field | type | meaning |
 |---|---|---|
-| `kind` | integer | the `EventKind` number |
+| `kind` | integer | the `EventKind` number; compare it with `require("sunrise.activity_sdk").EventKind.SQUAD_STATE` and the like |
 | `sequence` | string | event order number |
 | `source_generation` | string | client generation that produced it |
 | `attempt_generation` | string | attempt it belongs to |
 
-Most events also have `mission_sequence` (string), the input order. Delivery events do not.
+Most events also have `mission_sequence` (string), the input order. The events marked "no
+`mission_sequence`" in "Fields per event" do not.
 
 ### Slot identity
 
@@ -468,7 +519,8 @@ end
 
 ### Fields per event
 
-A field that the report did not carry reads nil. The first column is the callback name without
+A field that the report did not carry reads nil. A field of another event kind also reads nil, so
+one handler can test the fields of several kinds. The first column is the callback name without
 its `on_event_` prefix.
 
 | event | fields beyond the common ones |
@@ -487,6 +539,7 @@ its `on_event_` prefix.
 | `ghost_link_state` | slot identity; `generation`, `progress`, `active` |
 | `actor_path_state` | slot identity; `generation`, `revision`, `path_state`, `delivery_revision`, `delivery_state`, `suppressed` |
 | `scene_finished` | slot identity; `activation_token` |
+| `scene_output` | slot identity; `key`, the output key; `activation_token` of the run that reported it |
 | `objective_progress` | slot identity; `objective`, `task`, `task_count`, `previous_task_count` |
 | `cinematic_started`, `cinematic_terminated`, `cinematic_skip_requested` | slot identity; `runtime_object_id` (string), `event_value` |
 | `fireteam_state` | `alive_count`, `dead_count`, `unknown_count` |
@@ -498,12 +551,18 @@ its `on_event_` prefix.
 | `entity_slots_requested` | `requested_count` |
 | `sensor_sense_updated` | `client_message_sequence`, `payload_bytes`, `state_revision`, `peer_heard_mask`, `objects_decoded`, `groups_decoded`; slot identity of the first object, when there is one |
 | `incident_received` | `client_message_sequence`, `payload_bytes`, `incident_target`, `incident_extra_targets`, `incident_selector_bytes`, `incident_payload_bytes` |
+| `incident_queued`, `incident_transport_staged`, `incident_canceled`, `incident_refused` | `incident_revision`, `incident_target`, `incident_extra_targets`, `incident_selector_bytes`, `incident_payload_bytes`; no `mission_sequence` |
 | `client_message_received` | `client_message_sequence`, `payload_bytes`, `peer_heard_mask`, `state_revision`, `message_type`, `message_status`, `message_name`, `message` |
-| `scriptable_override_transport_staged` | `scriptable_revision`; no `mission_sequence` |
+| `auth_state_committed`, `auth_state_transport_staged`, `auth_state_canceled` | `state_revision`; no `mission_sequence` |
+| `scriptable_override_committed`, `scriptable_override_transport_staged`, `scriptable_override_canceled` | `scriptable_revision`; no `mission_sequence` |
+| `operator_refused` | `state_revision`; no `mission_sequence` |
+
+On `incident_canceled` the four body fields are 0 when there is no record. On `incident_refused`,
+`incident_revision` is always 0. On `operator_refused`, `state_revision` is 0 on most refusals.
 
 ### `client_state_changed` in detail
 
-The client sends state reports often, also while it loads. Most carry no change.
+The client sends state reports often, even while it loads. Most carry no change.
 
 | field | present when |
 |---|---|
@@ -546,6 +605,11 @@ react to the first arrival.
 `slot.reset_objectives`, `slot.advance_task`, `slot.play_dialogue_cue`, `mission.select_state`,
 `mission.hold_spawn`.
 
+Some requests report the name of the effect they share. `complete_mission` reports
+`lifetime.set`. `activate_objects` reports `slot.set_object_active`. `transition` reports
+`slot.set_channel`. `disarm_trigger` reports `slot.fire_trigger`. `play_actor_path` and
+`play_actor_action` report `slot.run_atoms`.
+
 ### `client_message_received`
 
 | field | meaning |
@@ -564,7 +628,7 @@ A message row's `matches{event = e}` tells whether an event is that message.
 | `effect argument is not declared` | a misspelled or extra key in the argument table |
 | `effect arguments must be one table` | you passed a value that is not a table |
 | `<key> must be a <type>` | wrong type for a named argument |
-| `unknown or ambiguous activity slot` | the id is not in this activity |
+| `unknown or ambiguous activity slot` | the id is not in this activity; squads and scenes say `activity squad` and `authored scene` |
 | `activity slot is not an exact type-N ...` | the method does not fit this slot type |
 | `activity slot is stale` | the data changed under a handle you kept |
 | `mission variable name is invalid` | empty, too long, or a bad character |
@@ -572,6 +636,9 @@ A message row's `matches{event = e}` tells whether an event is that message.
 | `mission variable capacity exceeded` | more than 512 variables |
 | `mission timer capacity exceeded` | more than 32 timers |
 | `directive does not belong to this slot` | the directive comes from another sensor |
+| `directive progress requires an element with a counter` | `progress` on a directive without `counter = true` |
 | `squad counts were minted by another squad` | a count vector from a different squad |
 | `mission attempt is already complete` | `complete_mission` called twice |
-| `instruction_budget` | the callback ran too long |
+
+Faults that stop a whole callback, such as `instruction_budget`, are in
+[Common problems](/docs/mission-scripting/debugging/#common-problems).
