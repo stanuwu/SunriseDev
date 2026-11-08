@@ -47,6 +47,33 @@ game stores one scale. Every handle scales all three axes. Dragging the center s
 right makes the object bigger. **Select** goes back to plain selection. When an object gets no
 handles, hover the tool button for the reason.
 
+## Copy or remove a static object
+
+A static instance, such as a rock or a wall piece, can be copied or removed.
+
+To copy it:
+
+1. Select the object.
+2. In the Inspector, type the copy's values in **Position**, **Rotation** and **Scale**.
+3. Press **Copy to this transform**.
+
+The object stays where it is, and a copy appears at the values you typed. Each copy is its own row
+in the Changes tab. The build gives a copy its own small table, so the installed table and its
+visibility data stay unchanged.
+
+To remove it:
+
+1. Select the object.
+2. In the Inspector, press **Remove object**.
+
+The Inspector then shows **Removed in this project**. **Restore object** brings it back. The removed
+object keeps its collision, so the player can still bump into where it was.
+
+Studio refuses both when it cannot prove where the object is drawn. A removal is also refused when
+the object's table uses dynamic visibility, because the game would still draw it.
+
+Whether a copy or a removal shows in game is unverified.
+
 ## Group objects
 
 A group is a set of objects that are selected and transformed together. The project saves it. The

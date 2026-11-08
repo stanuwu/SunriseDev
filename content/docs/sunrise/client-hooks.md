@@ -1,6 +1,6 @@
 ---
 title: "Client hooks"
-date: 2026-10-15
+date: 2026-11-08
 description: "Every hook Sunrise installs in the game client, what it does, and what retires it."
 weight: 60
 ---
@@ -42,7 +42,7 @@ all or none.
 |---|---|---|
 | DLL load, Steam init | `src/dllmain.cpp`, `src/steam/runtime/steam_lifecycle.cpp` | egress guard, package trust, boot textures |
 | Steam networking loads | `src/client/runtime/client_platform_hook_activation.cpp` | two Steam networking hooks |
-| first frame | `src/client/runtime/client_hook_activation.cpp` | DXGI, cursor, keys |
+| first frame | `src/client/runtime/client_hook_activation.cpp` | DXGI, cursor, keys; test input only in a test process |
 | game image scanned | `src/client/runtime/client_hook_activation.cpp` | network group, all game hooks; noclip and infinite ammo only when `client.cheats` is on |
 | Studio link starts | `src/client/diagnostics/studio/` | pose and CUI observers, only when `core.studio_attach` is on |
 | on a trigger | `src/client/hooks/retail_log/`, `src/steam/runtime/callbacks/callback_dispatch.cpp` | two data fixes, one feature flag |
@@ -98,7 +98,7 @@ the ammo setters attach only when `client.cheats` is on at startup.
 |---|---|---|---|
 | bubble authority | lets message 5 set authority on every bubble | detour (2) | nothing yet; no server field reaches the gate |
 | package trust | loads installed packages the trust check refuses | detour, patch (2) | unknown; the refusal is not understood |
-| mod package path | opens the package files a mod serves from the Sunrise folder: the path builder and the file opener; attached only when a mod serves a file | detour (2) | nothing; the game only opens packages from `packages` ([Mods](/docs/sunrise/mods/)) |
+| mod package path | opens the package files a mod serves from the Sunrise folder: the path builder and the file opener; writes kept live updates into a tag when it loads; attached only when a mod serves a file | detour (3) | nothing; the game only opens packages from `packages`, and registers them once ([Mods](/docs/sunrise/mods/#package-changes-in-a-running-game)) |
 | async I/O guard | stops a native reload from racing a teardown | patch | a fix for the native race |
 | lore books | clears display gates on lore books; on by default | data | a data fix for the gates |
 | Arrivals leg mods | moves four leg mods into the leg plug set; off by default | data | removal; the retail game has the same gap |
@@ -106,8 +106,8 @@ the ammo setters attach only when `client.cheats` is on at startup.
 
 ## Diagnostics
 
-These only read and log, with two exceptions: the assert handler, and the retail log's verbosity
-setting.
+These only read and log, with three exceptions: the assert handler, the retail log's verbosity
+setting, and the test input guards.
 
 | hook | what it logs | kind |
 |---|---|---|
@@ -115,6 +115,8 @@ setting.
 | assert handler | the assert; the game keeps running unless the device was lost | handler swap |
 | hitch watchdog | the watchdog snapshot and the stuck thread's stack | detour |
 | stall watcher | every thread's stack when the frame pump stops | thread |
+| exception probe | C++ throws from Sunrise, faults in Sunrise code, and access violations in game code, with return addresses; every exception goes on to the next handler | vectored handler |
+| test input | only when the process starts with `SUNRISE_TEST_INPUT=1`: takes keys, mouse, raw input and pad state from a test harness, reports the window as in front, and saves screenshots | export |
 | cinematic readiness | the readiness stages of boot cinematics | detour (16) |
 | lifetime gate | the spawn gate inputs and each message 5 roster apply | detour (2) |
 | network tick | one byte of the network guard, each frame | call |

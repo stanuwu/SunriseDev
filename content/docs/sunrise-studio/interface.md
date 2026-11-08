@@ -84,7 +84,7 @@ Drag the border between two areas to resize them. A window holds at most 16 area
 | Assets | **Export full asset to Blender...**, **Export world to Blender...**, **Import Blender asset...**, **Import skinned model...**, **Export...**, **Export animation...**, **Export editable animation...**, **Import animation controls...**, **Export material to Blender...**, **Export collision...**, **Import collision...**, **Import as delta...**, **Add asset...**, **Edit perk behavior...**, **Resolve asset names** |
 | Build | **Build packages**, **Build and install**, **Update running game**, **Build to folder...**, **Mod details...** |
 | View | **Mission Graph**, **Live**, **Items**, **Frame selection**, **Set cursor to selection**, **Wireframe**, **Grid**, **Panels**, **Restore areas**, **Reset layout** |
-| Help | **Third-party notices**: the licenses of the libraries and code Studio includes |
+| Help | **Licenses**: Studio's own license, and the licenses of the libraries and code it includes |
 
 **Save project** becomes **Save script** while the Mission Graph has focus. A menu item is gray when
 it does not apply, for example an edit command without a project.
@@ -106,7 +106,8 @@ Items** opens the Assets tab on the Weapons list, or on the category list when t
 category. [Find and open assets](/docs/sunrise-studio/find-assets/) explains the list.
 
 One search box, **Search items, enemies and assets**, covers every asset. Inside a category it
-covers that category only. Every word must match.
+covers that category only. Every word must match. A search that starts with `@` or `##0x` is a tag
+query.
 
 | control | where | effect |
 |---|---|---|
@@ -116,7 +117,7 @@ covers that category only. Every word must match.
 | package list | All other assets | one package; **All packages** shows every package |
 | **Changed only** | every list, and the category list | only entries the project changed or added; shown with a project open |
 | **New** and **Clone** icons | a category, at the right of the title | create content of that category; see [Create from a category](/docs/sunrise-studio/create-content/) |
-| **New** icon | All other assets | a list of plain asset types: Texture, Static prop, Clone material |
+| **New** icon | All other assets | a list of plain asset types: Texture, Static prop, Clone material, Destination, Activity |
 
 All filters apply together. **Type** is unavailable until the chosen category has types. A row in a
 category shows the name, coloured by rarity for items, and its type and package. In search results
@@ -166,6 +167,7 @@ beside them lists every tab. The pages depend on the asset:
 | Components | each config of an entity with its fields, and damage parts for enemies; edits may not work in game |
 | CUI | the CUI layout editor |
 | Graph | the structure of a behavior or CUI asset |
+| Tag | every field of a tag the tag registry describes, with typed editors; see [Edit a tag by its fields](/docs/sunrise-studio/edit-properties/#edit-a-tag-by-its-fields) |
 | Properties | every decoded field |
 | References | every tag the asset points at |
 | Bytes | the raw bytes, with a byte editor |

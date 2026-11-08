@@ -1,6 +1,6 @@
 ---
 title: "The Activity Host"
-date: 2026-10-15
+date: 2026-11-08
 description: "How Sunrise loads the client into a destination and serves the activity link after that."
 weight: 50
 ---
@@ -77,7 +77,9 @@ The client refuses a body of any other size.
 
 Service 6 carries the client's destination pick. Sunrise reads the destination out of it, prepares
 a session in State, and answers. A malformed request still gets an answer. Sunrise falls back to a
-default selection, because a missing reply would stall the client's request queue. See
+default selection, because a missing reply would stall the client's request queue. A forced
+destination, set on the [Activity Launcher](/docs/sunrise/settings-and-logs/#the-activity-launcher)
+page, replaces the pick. See
 `src/server/bap/encrypted/activity_host_manager/activity_host_manager_route.cpp`.
 
 ```c
@@ -189,8 +191,9 @@ Every other client message in the route table is recorded only. It gets no reply
 On a private link, message 22 also sends message 12 if membership changed, and message 5 if the
 region moved.
 
-A message from a link that does not own its session is recorded and dropped. So is a message whose
-body cannot be staged. The frame itself is still accepted. A refused frame would stall the client's
+A message from a link that does not own its session is recorded and dropped. Message 3 is the
+exception, since it binds the session, and so is message 52 with session id 0. A message whose body
+cannot be staged is recorded and dropped too. The frame itself is still accepted. A refused frame would stall the client's
 request queue.
 
 ### What the host pushes on its own
@@ -200,6 +203,8 @@ The host pushes when its own state changes. In
 
 - a new committed Auth state revision
 - a script request waiting to be sent
+- a state a script selected that the client has not received yet
+- a host incident waiting to be sent, once the client is in the world
 - an entity retirement that is due
 - the answer to the client's arrival report, once the client is in the world
 - a move of the client into another region, which changes the advertised host
@@ -214,8 +219,8 @@ pending, it checks on every pass instead, so a request does not wait out the int
 The link also has a keepalive every 2 seconds. It carries message 1, a small global state, and
 message 44 when a replication epoch is waiting. It carries message 12 only when the table changed,
 the client moved region, or the client has not acknowledged the current revision yet. A membership
-body held back for a missing host record is retried after 250 ms. So is an incident whose send
-failed.
+body held back for a missing host record is retried after 250 ms. An incident whose send failed
+goes out on the next push.
 
 ## Client reports come in
 

@@ -1,6 +1,6 @@
 ---
 title: "Bootflow"
-date: 2026-10-15
+date: 2026-11-08
 description: "The client's boot state machine: its 79 steps, how a step runs, and how it fails."
 weight: 70
 ---
@@ -38,14 +38,14 @@ waits on is not.
 |---:|---|---|
 | 0 | `pregame` | not read |
 | 1 | `bootflow:media_check` | not read |
-| 2 | `bootflow:bootload` | not read |
+| 2 | `bootflow:bootload` | not read; registers the three unpatchable packages |
 | 3 | `bootflow:start` | not read |
 | 4 | `bootflow:platform_signin` | not read |
 | 5 | `bootflow:platform_account_warnings` | not read |
 | 6 | `bootflow:enumerate_content_rights` | not read |
 | 7 | `bootflow:account_signin` | not read in detail |
 | 16 | `bootflow:content_check` | installed content; one DLC wait fails after 2 s |
-| 21 | `bootflow:package_registration` | not read |
+| 21 | `bootflow:package_registration` | one registration job per package file in the content configuration; see [Packages](/docs/destiny-2/packages/#how-the-client-registers-packages) |
 | 22 | `bootflow:bap_signin` | 19 tasks; two are package loads (patchable bootstrap, investment globals) |
 | 23 | `bootflow:investment_signin` | six tasks; task 0 finishes last and waits for the account's investment data |
 | 24 | `bootflow:profile_setup` | the player clicking through the startup settings screens |
@@ -63,7 +63,7 @@ waits on is not.
 | 36 | `activity:initial_slice_set_loading` | eleven tasks: loading screen, slice-set load, region data |
 | 37 | `activity:physics_join` | a travel cinematic, if one is armed; capped at 15 s |
 | 38 | `activity:in_world` | nothing while the activity runs; lifetime states 6, 7 and 10 start the post-game chain |
-| 39 | `activity:watch_video` | not read |
+| 39 | `activity:watch_video` | the movie the activity names; a missing movie tag is skipped in silence |
 
 A boot goes 7 -> 16 -> 21. It skips steps 8 to 15 and 17 to 20. Those are account, content
 and queue gates: `entitlement_warning`, `sms_validation`, `free_license_limit_exceeded`,
@@ -309,7 +309,7 @@ for. It does nothing every frame and reports nothing.
 
 ## Open questions
 
-- What steps 0 to 7, 21 and 39 wait on.
+- What steps 0 to 7 wait on.
 - Whether the step table is several lists joined, and what steps 40 to 49 do.
 - The manager's own tick function.
 - Whether the 32-bit reason values are hashes of the lost reason names.

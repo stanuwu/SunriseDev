@@ -1,6 +1,6 @@
 ---
 title: "Time and frame pacing"
-date: 2026-10-15
+date: 2026-11-08
 description: "How the engine paces frames at 30 Hz, turns frame time into ticks, and counts gameplay and UI time."
 weight: 20
 ---
@@ -113,6 +113,27 @@ compiled in but turned off. Most of its gameplay reads the clock and rarely the 
 
 So a variable time step cannot simply be switched on in Destiny 1. Every tick-based timer would run
 faster as the frame rate rises.
+
+## Code that steps once a frame
+
+Code that steps once a frame, not once a tick, runs faster when frames and ticks come apart. A read
+of the frame update's callees finds these:
+
+| what | counts | at a higher frame rate |
+|---|---|---|
+| pad button and trigger hold time | real milliseconds, from the time stamp counter, saturating at `0xFFFF` | unchanged |
+| hold frames, a byte beside it | frames, stopping at 255 | rises with the rate |
+| the touch-binding hold | 33 ms times the held frames | runs faster; needs a touch point |
+| the auto-exposure step | one step per rendered frame; every blend factor and window counts calls | adapts faster |
+| the resource manager's deferred frees | waits 3 updates | unchanged in effect: GPU frames in flight are counted in frames |
+| the camera director | clamps the frame time to 1/15 s | -- |
+
+The exposure step runs from the view render, once a frame. It blends three smoothed values by
+0.0175 a call and moves the exposure toward its target by a fixed share of the gap a call. At 30
+frames a second the exposure falls from 0.5 to -0.9 in about 6.2 s. At about 325 frames a second it
+does the same in 0.45 s.
+
+A player-control word counts input frames up to 127. No reader of it was found.
 
 ## The UI clock counts whole milliseconds
 

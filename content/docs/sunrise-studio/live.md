@@ -7,8 +7,10 @@ group: "Guides"
 The Live tab attaches Studio to a Destiny 2 process running from your installation. Studio then shows
 what the game has loaded: its camera, map, bubbles, objects, animation and open UI screens. The link
 is read only. Studio changes game state only through
-[Update running game](/docs/sunrise-studio/build-and-install/#update-a-running-game), which reloads
-mod scripts.
+[Update running game](/docs/sunrise-studio/build-and-install/#update-a-running-game), which sends
+changed scripts and package data. The **Live** checkbox at the top of the tab runs it after each
+change, and **Reload bubble** sets the next launch to land where the player is. Both work without
+Attach. Both need a project with mod details; without them, they are gray.
 
 The live link is unverified end to end in a running game.
 [The live link](/docs/sunrise-studio/live-link/) explains what the game sends and when.

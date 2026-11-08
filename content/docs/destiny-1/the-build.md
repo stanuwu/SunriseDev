@@ -1,6 +1,6 @@
 ---
 title: "The build"
-date: 2026-10-15
+date: 2026-11-08
 description: "The Destiny 1 build these pages describe: PS4 version 1.29, its modules and libraries, and the Xbox One build used for cross-checks."
 weight: 5
 ---
@@ -69,7 +69,7 @@ These libraries make most of the game's system calls themselves. See
 ### Video
 
 Movies are CRI USM files: CRI MPV 2.100 video with ADX and HCA audio, decoded in software. The game
-imports no Sony video decoder.
+imports no Sony video decoder. A read of all 1,647 package files finds 16 USM movies.
 
 Bink is dead code. A function still builds the paths `bink\%s_%d.bik` for `attract_1` to
 `attract_3`, `intro`, `credits` and `story`, but it passes them to an empty function.
@@ -115,7 +115,6 @@ what does not is in
 
 ## Not checked
 
-- Whether the movie files in the packages are all CRI USM files. The packages were not read for
-  them.
+- Whether the packages hold movies in any format other than USM.
 - How much of Umbra the build uses.
 - Whether the 29 `OrbShdr` blocks match the Xbox build's 15 HLSL shaders.

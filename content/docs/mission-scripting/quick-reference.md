@@ -1,6 +1,6 @@
 ---
 title: "Quick reference"
-date: 2026-10-15
+date: 2026-11-08
 description: "The program skeleton, the calls you need most, and where every file lives."
 weight: 120
 ---
@@ -38,6 +38,7 @@ Every entry is optional. See [How a script runs](/docs/mission-scripting/program
 | show a goal counter | the same, with `progress = {current, maximum}` on a directive with `counter = true` |
 | play a line | `context:slot(Slot.M_DIALOG_SENSOR_X):play_dialogue_cue{cue = n}` |
 | watch a trigger | `context:slot(Slot.PT_X):fire_trigger()` then `on_event_player_trigger` |
+| count who is in an area | `context:slot(Slot.PM_X):set_occupancy_condition{value = 1}` then `on_event_trigger_entered` and `on_event_trigger_exited` |
 | check a clear | `context:cohort{squads = {...}}.cleared` |
 | change area | `context:select_state(mission.states.STATE_X)` |
 | start a scene | `context:scene(Scene.X):activate{}` |

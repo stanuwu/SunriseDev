@@ -15,8 +15,8 @@ Studio decodes and mixes audio itself. It needs no other program.
 ## Play a track
 
 1. In the Assets tab, open the **Audio** category and click an event, bank or stream. It opens on
-   the **Audio** page. The **Type** filter picks events, banks or streams. **Event timing** and
-   **Event shared** rows do not open on the **Audio** page.
+   the **Audio** page. The **Type** filter picks **Event**, **Bank**, **Init bank** or **Stream**.
+   **Event timing** and **Event shared** rows do not open on the **Audio** page.
 2. If the page asks, press **Load audio**.
 3. Click a row under **Tracks and effects**. **Find track or composition** filters the list.
 4. Press **Play**.

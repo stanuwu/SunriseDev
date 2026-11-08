@@ -1,6 +1,6 @@
 ---
 title: "Recipes"
-date: 2026-10-15
+date: 2026-11-08
 description: "Short answers to how do I spawn, open, show, play, wait and finish."
 weight: 70
 ---
@@ -386,6 +386,22 @@ end,
 - Without `filter`, the client measures its default player set.
 - With `filter = context:slot(Slot.OF_SOMETHING)`, the client uses that filter.
 - The first report of a volume is recorded silently. The event comes on the next change.
+- `on_event_trigger_state` fires on every report, the first one included. It carries the same
+  counts when the report was complete.
+
+### Turn a trigger volume on or off
+
+A type-32 volume toggle turns one of its object's type-60 volumes on or off:
+
+```lua
+context:slot(Slot.SOME_VOLUME_TOGGLE):set_volume_active{
+    volume = context:slot(Slot.TV_SOME_VOLUME),
+    active = false,
+}
+```
+
+- `volume` must be a volume of the same object as the toggle.
+- This is unverified in game.
 
 ---
 
@@ -670,8 +686,13 @@ context:slot(Slot.OF_ARENA):set_object_filter{
 |---|---|
 | `players` | players only |
 | `target` | one type-4 object |
+| `targets` | up to 8 type-4 objects |
+| `squad` | one type-1 squad |
 | `inside` | objects inside a type-60 volume |
 | `inside_any` | objects inside any of up to 5 volumes |
+
+All tests together fit eight places; see
+[`set_object_filter`](/docs/mission-scripting/lua-api/#set_object_filter).
 
 ### Turn on a darkness zone
 

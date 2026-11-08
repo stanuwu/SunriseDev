@@ -37,7 +37,8 @@ Both modes save their data as deltas. Neither is tested in game.
 3. Choose **Replace model** or **Create asset**.
 4. Choose the installed **Template** part.
 5. Type a **Name**. It starts as the file name.
-6. Type an unused **Package ID**. It starts as the last package ID your project used, or `0AA0`.
+6. Type an unused **Package ID**. It starts as the last package ID your project used, or the next
+   free ID of your mod.
 7. Press **Review import**.
 8. Read the counts. For Replace model, the review says how many template parts it removes.
 9. Press **Replace model** or **Create asset**.

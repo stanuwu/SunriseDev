@@ -1,6 +1,6 @@
 ---
 title: "From launch to orbit"
-date: 2026-10-15
+date: 2026-11-08
 description: "How the game reaches Sunrise, signs on, opens its BAP link and walks the boot steps to orbit."
 weight: 30
 ---
@@ -262,7 +262,9 @@ Notes on the steps that need the server:
 - **Step 26.** If the account data is absent when this step starts, the step does nothing and
   reports no error.
 - **Step 27.** The family 3 roster object holds the character count. A count of zero sends the
-  client to character creation instead of character selection.
+  client to character creation instead of character selection. Creating and deleting a character
+  are ws opcodes 501 and 502; see
+  [Creating and deleting characters](/docs/sunrise/save-data/#creating-and-deleting-characters).
 - **Step 29.** This is not the end. It hands on to `setup:activity_session_creation`, which starts
   the flow in [The Activity Host](/docs/sunrise/activity-host/).
 

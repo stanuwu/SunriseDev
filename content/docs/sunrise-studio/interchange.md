@@ -9,18 +9,19 @@ written for Studio. Exported files are working copies. Only imported differences
 
 ## Inspectors
 
-An inspector decodes one kind of asset for the Properties page. The binary view is always available.
+The Properties page shows every field of a tag the registry describes, the same tree as the Tag page.
+Values with a known width are editable there. For some classes a panel above the tree adds what the
+fields alone cannot show. The binary view is always available.
 
-| format | shows | editable |
+| format | panel shows | editable in the panel |
 |---|---|---|
 | binary | strings and possible tag references | bounded byte replacement |
-| CUI resource | imports, nodes, bindings, typed property operations | text hashes, raw flags, raw operation values |
-| CUI program | the node hierarchy and root resource | raw only |
-| behavior | a typed graph, source paths, linked tags | target tags, target hashes, raw comparison modes |
-| investment item | stack size, bucket, sockets, stats, sandbox perks | existing scalar fields |
-| investment tables | item index, display string hashes, collectible rows | display string hashes |
-| material | shader stages, texture slots, inline vectors | texture assignments, raw flags, vector values |
+| CUI resource | the node and binding graph, typed property operations | raw operation values |
+| CUI program | the graph of active nodes | none |
+| behavior | the node graph, decoded expressions and the channel names of their inputs | none |
+| material | header check | none |
 
+Items, displays, collectible and item index tables have no panel. Their tree shows every field.
 Behavior expressions and CUI bindings are not run. Unknown behavior nodes stay visible.
 
 ## File formats

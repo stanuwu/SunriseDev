@@ -24,8 +24,8 @@ The package data is not damaged.
 
 ## Start Studio
 
-Run `Sunrise Studio.exe`. It is one file and needs no .NET install. **Help > Third-party notices**
-lists the licenses of what it includes.
+Run `Sunrise Studio.exe`. It is one file and needs no .NET install. **Help > Licenses** shows
+Studio's license and the licenses of what it includes.
 
 To build Studio from source, install the .NET 9 SDK and run `publish.ps1` in the source folder. It
 writes `publish\Sunrise Studio.exe`. [Installing Sunrise Studio](/guides/installing-studio/) has the
@@ -49,7 +49,8 @@ bar names the current stage and its count. The first open scans every package fo
 longer. Later opens read the loading cache; see [Cache settings](/docs/sunrise-studio/cache/).
 
 If the folder holds no packages, the loading screen shows **Unable to load** and the reason. Press
-**Choose Sunrise location** to pick another folder.
+**Choose Sunrise location** to pick another folder. Without the package key export, the reason
+starts with "No decryption keys were found". Follow the steps below.
 
 ## Export package keys once
 
@@ -57,9 +58,9 @@ The normal packed executable keeps its package keys hidden until it runs. Sunris
 for Studio. No executable or memory dump is needed.
 
 1. Close the game and open `bin/x64/Sunrise/settings.json` in the installation.
-2. Set `"dump_package_keys": true` inside the `"client"` object. Keep its other settings.
+2. Inside the `"client"` object, set `"package_keys": true` in `"exports"`. Keep the other settings.
 3. Run Sunrise once. After startup, it writes `bin/x64/Sunrise/exports/package_keys.bin`.
-4. Close the game and set `"dump_package_keys": false` again. The export remains available.
+4. Close the game and set `"package_keys": false` again. The export remains available.
 5. Open Studio with **Package key source** on **Automatic**. Clear an older custom path if needed.
 
 This option is off by default. While enabled, it replaces the same export on each startup.
@@ -122,7 +123,8 @@ A project holds no installation paths and no local preferences, so it can be sha
 | `--script <name>` | open this mission script |
 | `--warp` | draw with the Windows software renderer instead of the graphics card |
 
-`Sunrise Studio.exe --help` prints a short list of options.
+`Sunrise Studio.exe --help` prints a short list of options. `Sunrise Studio.exe tft` works on loose
+tag files; see [How projects store edits](/docs/sunrise-studio/project-storage/#new-tags).
 
 ## Related pages
 

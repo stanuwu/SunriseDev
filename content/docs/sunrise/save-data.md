@@ -1,6 +1,6 @@
 ---
 title: "Accounts, characters and saves"
-date: 2026-10-15
+date: 2026-11-08
 description: "How Sunrise stores the player's account and sends it to the game over the BAP link."
 weight: 40
 ---
@@ -19,8 +19,8 @@ DLL. The code is in `src/state/investment/`.
 - On first start Sunrise creates the file. It writes the schema and the default rows. Both are
   built into the DLL as resources (`resources/database/`).
 - The defaults hold one account with three level-50 characters: a Hunter, a Titan and a Warlock.
-- On a later start Sunrise checks the schema version. Version 1 is upgraded to version 2 in place.
-  Any other version, or a file from another program, is refused.
+- On a later start Sunrise checks the schema version. Versions 1 to 4 are upgraded in place, one
+  step at a time, to version 5. A newer version, or a file from another program, is refused.
 - Every write runs inside a SQLite savepoint. A failed write rolls back and leaves no partial rows.
 - Writes are synchronous (`PRAGMA synchronous=FULL`). No unsaved copy is held in memory, except in
   a [cheat session](#cheat-sessions).
@@ -42,10 +42,13 @@ The file is plain SQLite. Back it up before you edit it by hand.
 | `entitlements` | owned content, sent in the SignOn reply |
 | `dismantle_rewards` | what dismantling gear pays out |
 | `pending_rewards` | rewards earned but not yet granted |
+| `parked_items` | items, stacks and profile rows whose content is not installed; see [Content that is no longer installed](#content-that-is-no-longer-installed) |
+| `starter_character`, `starter_items`, `starter_unlocks` | what a created character starts with; see [Creating and deleting characters](#creating-and-deleting-characters) |
 | `bootstrap` | one-time setup steps already done |
 | `account_*` | game settings: controls, audio, display, interface, social, key bindings |
 
-The `account_*` tables come from a second schema file, `account_settings_schema.sql`.
+The `account_*` tables come from a second schema file, `account_settings_schema.sql`. The
+`starter_*` tables come from `character_starter.sql`.
 
 ### Cheat sessions
 
@@ -65,6 +68,48 @@ If the copy fails, Sunrise does not start. The code is `use_session_copy` in
 `src/state/investment/investment_database.cpp`. How a mod sets the flag is in
 [Mods](/docs/sunrise/mods/#cheat-mods). The settings key is in
 [Settings, logs and in-game tools](/docs/sunrise/settings-and-logs/#client).
+
+### Content that is no longer installed
+
+A mod can add items. When the mod is removed, the save still holds those items, and the game cannot
+show an item whose definition is gone. Before Sunrise builds any account data for the game, it moves
+such rows out of the account into `parked_items`. Nothing is deleted.
+
+- A row is parked when its own definition is not installed, or, for an item, when one of its socket
+  plugs is not.
+- An equipped item that is parked leaves its slot empty. Sunrise then equips the first unequipped
+  item of that character that fits the slot, if there is one.
+- Each parked row writes a warning to the log: `ev=items stage=park`, with the definition hash.
+- On a later start, a parked row whose content is installed again goes back. An item returns to its
+  old equipped slot if that slot is empty, else to the end of the inventory. A row stays parked if
+  there is no room, or if the account would not resolve with it.
+- Deleting a character also deletes its parked rows.
+
+The code is `reconcile_installed_content` in `src/state/runtime/state_account_parking_runtime.cpp`.
+
+### Creating and deleting characters
+
+The game creates a character with ws opcode 501 and deletes one with ws opcode 502. Sunrise saves
+each change in one save transaction, so a refused change leaves nothing behind. The code is in
+`src/state/runtime/state_account_roster_runtime.cpp`.
+
+A new character:
+
+- takes the slot after the last character. The account holds at most three characters.
+- gets the lowest free SOID after the account SOID: account SOID plus 1, 2 or 3.
+- keeps the class, race, gender and appearance from the creation screen.
+- copies its level and other fields from `starter_character`, and its per-character unlocks from
+  `starter_unlocks`.
+- gets the items in `starter_items` for its class, then the game's own new-character item set for
+  that class. The first item for a slot is equipped; a later one goes to the inventory.
+- gets weapons and armour at the highest item level any other character holds, and at least 1, so
+  it keeps pace with the account.
+- is not selected. Only a pick selects a character.
+
+The 501 reply carries the new character's SOID. A refused request gets code 1 and SOID 0.
+
+Deleting a character removes its items and every row keyed by its slot. The characters after it
+move down one slot and keep their SOIDs. If it was the selected one, no character is selected.
 
 ## The account model
 
@@ -143,7 +188,7 @@ A family is identified by its type and a root SOID. Sunrise builds these types:
 | type | what Sunrise sends | builder |
 |---:|---|---|
 | 0 | the banner pair for one character | `push/snapshot/banner_snapshot.cpp` |
-| 2 | the social roster member record | `push/snapshot/social_roster_snapshot.cpp` |
+| 2 | the social roster member record, with the selected character's Power and the Triumph score | `push/snapshot/social_roster_snapshot.cpp` |
 | 3 | the character roster; its count picks selection or creation | `push/snapshot/roster_snapshot.cpp` |
 | 4 | the account object, the selected character object, one object per item | `push/snapshot/family4_snapshot_preparer.cpp` |
 | 5 | the global override object | `push/queuez/queuez_family5_push.cpp` |
@@ -297,7 +342,8 @@ The dispatch is in `src/server/web_service/web_service_runtime.cpp` and
 | 402 | dismantle an item |
 | 403, 404 | equip, unequip |
 | 406 | change item state flags |
-| 501 | return the selected character's SOID |
+| 501 | create a character |
+| 502 | delete a character |
 | 503 | account bootstrap |
 | 504 | pick a character |
 | 505 | change character |

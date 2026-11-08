@@ -82,7 +82,6 @@ These are refused, or omitted with Skip:
 - nearest filtering and non-repeat wrapping
 - material extensions
 - images other than PNG
-- normal maps with negative Z
 
 [Native authoring profiles](/docs/sunrise-studio/authoring-profiles/#original-asset-materials) has
 the exact conversion.

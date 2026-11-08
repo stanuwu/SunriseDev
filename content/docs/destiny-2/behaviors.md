@@ -1,6 +1,6 @@
 ---
 title: "Behaviors"
-date: 2026-10-15
+date: 2026-11-08
 description: "The compiled logic in the packages: object behaviors on entities, perk programs, unlock expressions and UI bindings. How each runs, and how to decompile and recompile it."
 weight: 38
 ---
@@ -24,9 +24,12 @@ Other compiled data has its own page:
   with the expression VM but run on a larger interpreter.
 - Particle emitter programs are on
   [Effects and particles](/docs/destiny-2/effects-and-particles/#emitter-programs).
-- Actor commands are on [Actors and AI](/docs/destiny-2/actors-and-ai/#command-records).
+- Actor commands are on [Actors and AI](/docs/destiny-2/actors-and-ai/#command-records), and
+  the compact behavior programs actors and scenes run are on
+  [Actors and AI](/docs/destiny-2/actors-and-ai/#actor-behavior-programs).
 
-Two things look like programs and are not. The class `0x80800000` entries are not scripts; see
+Two things look like programs and are not. The class `0x80800000` entries are class records, not
+scripts; see
 [Schema handles](/docs/destiny-2/tags-and-definitions/#schema-handles). And the packages hold no Lua
 chunks. Destiny 1's Lua-style chunk format does not occur.
 
@@ -240,7 +243,7 @@ The engine registers 27 node types. The names are the game's own.
 | `player_custom_interaction_extended` | `0x80802A66` | the same, with a candidate list |
 | `redirect` | `0x80804E31` | rebinds the context, then runs children |
 | `relative_teleportation` | `0x80802907` | moves an object by a relative transform |
-| `remove_hop_on` | `0x80804E30` | attaches a pooled record; name not confirmed by its code |
+| `remove_hop_on` | `0x80804E30` | attaches a pooled record; name unverified |
 | `resource` | `0x80804E27` | queues a resource change |
 | `search` | `0x80804E23` | spatial query; feeds found objects to children |
 | `select` | `0x80804E1C` | scores and sorts targets; top n run one branch, the rest another |
@@ -489,43 +492,64 @@ values themselves are on
 [Items, characters and inventory](/docs/destiny-2/investment-data/#unlock-flags-and-the-evaluator).
 
 An expression record is `{u32 count; ...; i64 offset}`. Its instructions are 8 bytes each: the
-opcode byte at `+0` and a u16 operand at `+4`. The evaluator is a stack machine.
+opcode byte at `+0` and the operand at `+4`. Opcodes 1, 10 and 12 read the operand as a u16, and
+opcode 11 reads it as a u32. The evaluator is a stack machine over 32-bit integers. `a` is the value
+pushed first and `b` the top.
 
 | opcode | meaning | opcode | meaning |
 |---:|---|---:|---|
-| 1 | push a flag | 13 | `a > b` |
-| 2 | NOT | 14 | `a >= b` |
-| 3 | OR | 15 | `a < b` |
-| 4 | AND | 16 | `a <= b` |
-| 5 | NOR | 17 | `a + b` |
-| 6, 9 | not equal | 18 | `a - b` |
-| 7 | NAND | 19 | `a * b` |
-| 8 | equal | 20 | `a / b` |
-| 10 | push a value | 21 | `a % b` |
-| 11 | push a constant | 24 | FNV-1 combine |
+| 1 | push a flag | 15 | `a < b` |
+| 2 | NOT | 16 | `a <= b` |
+| 3 | OR | 17 | `a + b` |
+| 4 | AND | 18 | `a - b` |
+| 5 | NOR | 19 | `a * b` |
+| 6, 9 | not equal | 20 | `a / b` |
+| 7 | NAND | 21 | `a % b` |
+| 8 | equal | 22 | negate |
+| 10 | push a value | 23 | FNV-1a of the value |
+| 11 | push a constant | 24 | FNV-1a of `b`, seeded with `a` |
 | 12 | evaluate a shared-pool row | 25, 26, 27 | `&`, `\|`, `^` |
+| 13 | `a > b` | 28 | bitwise NOT |
+| 14 | `a >= b` | | |
 
-The signedness and divide-by-zero behavior of opcodes 20 and 21 are unverified.
+- Opcodes 2, 22, 23 and 28 replace the top value. Opcodes 3 to 9, 13 to 21 and 24 to 27 pop `b`.
+- Comparisons, division and remainder are signed. A zero divisor pushes 0.
+- Nothing guards `INT_MIN / -1`, so that pair crashes the client.
+- Both hashes take the value's four bytes in big-endian order. Opcode 23 starts from `0x811C9DC5`.
+- The evaluator skips any opcode outside 1 to 28.
 
 ```c
-bool unlock_eval(const EvalState *s, const ExprRecord *e)
+int32_t unlock_run(const EvalState *s, const ExprRecord *e)
 {
-    if (!e || e->count == 0)
-        return true;                 /* callers treat "no expression" as a pass */
-    int64_t stack[64];
+    int32_t stack[256];
     int sp = 0;
     const Instr *ins = expr_instructions(e);
     for (uint32_t i = 0; i < e->count; i++) {
-        switch (ins[i].op) {
+        int op = ins[i].op;
+        int arity = op_arity(op);            /* push 0, unary 1, binary 2, unknown -1 */
+        if (arity < 0)
+            continue;                        /* unknown opcode: skipped */
+        if (sp < arity || (arity == 0 && sp == 256))
+            continue;                        /* reported as an error and skipped */
+        switch (op) {
         case 1:  stack[sp++] = s->flags[(int16_t)ins[i].operand] == 2; break;
         case 10: stack[sp++] = s->values[(int16_t)ins[i].operand];     break;
-        case 11: stack[sp++] = ins[i].operand;                         break;
+        case 11: stack[sp++] = ins[i].operand32;                       break;
         case 12: stack[sp++] = pool_eval(s, ins[i].operand);           break; /* raw result */
-        case 2:  stack[sp - 1] = !stack[sp - 1];                       break;
-        default: sp--; stack[sp - 1] = binary_op(ins[i].op, stack[sp - 1], stack[sp]); break;
+        case 2: case 22: case 23: case 28:
+            stack[sp - 1] = unary_op(op, stack[sp - 1]);
+            break;
+        default: sp--; stack[sp - 1] = binary_op(op, stack[sp - 1], stack[sp]); break;
         }
     }
-    return sp == 1 && stack[0] != 0;
+    return sp == 1 ? stack[0] : 0;
+}
+
+bool unlock_eval(const EvalState *s, const ExprRecord *e)
+{
+    if (!e || e->count == 0)
+        return true;                         /* callers treat "no expression" as a pass */
+    return unlock_run(s, e) != 0;
 }
 ```
 

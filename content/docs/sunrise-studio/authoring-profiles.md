@@ -61,9 +61,8 @@ New constants turn off the template's emission and tint. Normal blue is one, so 
 smoothness. Texture coordinates keep the glTF image orientation. The game shader keeps its own
 samplers and bytecode.
 
-Normal maps follow the glTF normal texture rules: decode RGB to XYZ, scale X and Y, then normalize. Positive Z lets the game shader rebuild Z. Normals
-facing negative Z cannot use this profile. They are refused, or replaced by a flat normal with
-**Skip unsupported surfaces**.
+Normal maps follow the glTF normal texture rules: decode RGB to XYZ, scale X and Y, then normalize.
+The game shader rebuilds Z as positive, so a normal facing negative Z imports as its mirror.
 
 Each material becomes nine entries: a material, a constant-buffer pair and three texture pairs.
 Texture maps are RGBA8 with one mip, so colors and factors can lose some precision. Material

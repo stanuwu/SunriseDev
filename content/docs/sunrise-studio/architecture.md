@@ -12,13 +12,15 @@ split into libraries under `src/`, one per concern. All of them build with one v
 
 | library | owns |
 |---|---|
-| `SunriseStudio.Packages` | package catalogs, native metadata, block reads, package writing, overlays, the disk cache |
+| `SunriseStudio.Packages` | package catalogs, native metadata, block reads, package writing, overlays, the disk cache, the tag registry with each class's name and category |
 | `SunriseStudio.Scene` | scene traversal, names, meshes, placements, lights, effects, SpeedTree foliage, markers, collision |
 | `SunriseStudio.Animation` | skeletons, weights, control tracks, rig evaluation, root motion |
 | `SunriseStudio.Rendering` | Direct3D 11 resources, the ImGui backend, shaders, game shader and emitter program execution, readback |
 | `SunriseStudio.Viewport` | the cameras, previews, animation and particle playback, scene rendering, the shortcut registry |
 | `SunriseStudio.Formats` | typed inspection, editable field definitions, interchange codecs |
+| `SunriseStudio.Tags` | tag parsing and writing, the content graph, path queries, in-place struct views, `.tft` loose tags |
 | `SunriseStudio.Projects` | the manifest, byte deltas, object edit storage, added assets, builds, mod installs |
+| `SunriseStudio.World` | destination copies as `.tft` files, activity rows, the activity SDK pack |
 | `SunriseStudio.Authoring` | imports that assemble native assets, and the object edit compiler |
 | `SunriseStudio.Interchange` | Blender asset bundles, dependency groups, world scenes |
 | `SunriseStudio.Missions` | lossless Lua parsing, flow and campaign graphs, SDK references, script projects |
@@ -26,6 +28,10 @@ split into libraries under `src/`, one per concern. All of them build with one v
 | `SunriseStudio.Live` | the shared-memory link to a running game |
 | `SunriseStudio.Editor` | the workspace, pages, theme, commands, layout, navigation history, pop-out windows |
 | `SunriseStudio.App` | the Windows entry point and launch options |
+
+`src/SunriseStudio.Tags.Generated` is not a library of its own. It holds one struct per tag class,
+generated from the registry and never edited by hand. `SunriseStudio.Packages` compiles it, with
+the struct views in `SunriseStudio.Tags/Views`, so the package readers can use them.
 
 The Blender add-on is a separate Python package with its own repository,
 [SunriseBlenderPlugin](https://github.com/stanuwu/SunriseBlenderPlugin). Users install it in Blender
@@ -99,7 +105,8 @@ lists the cases.
 Implement `IAssetInspector` in Formats and register it with `AssetInspectionService.Register`. An
 inspector returns sections, properties, references, diagnostics and an optional graph. Mark a
 property editable only when its offset and encoding are known. The property page applies scalar
-edits through `AssetEdit`.
+edits through `AssetEdit`. For a class the tag registry describes, the editor shows the inspector as
+a panel above the field tree, so show only what the fields cannot, such as a graph or decoded values.
 
 For a different UI, implement `IStudioPage` and register it with `StudioForm.Pages.Register`. The page
 gets a `StudioPageContext` with the workspace and the viewport. A page with GPU resources implements
@@ -110,14 +117,17 @@ into project files from a page.
 ### Add a browser category
 
 A browser category is a group of assets with its own viewer, such as weapons or enemies.
-`StudioCategories` in Editor holds them. It has three registration hooks and three matching
-classify hooks, one pair each for items, entities and content. Each hook is a `static partial void`
-method that one category file implements, so the tree builds with or without that file.
+`StudioCategories` in Editor holds them. It has four registration hooks and four matching classify
+hooks, one pair each for items, guardians, entities and content. Each hook is a `static partial
+void` method that one category file implements, so the tree builds with or without that file.
 
 | hook | does |
 |---|---|
-| `AddItemCategories`, `AddEntityCategories`, `AddContentCategories` | add `StudioCategory` records |
-| `ClassifyItem`, `ClassifyEntity`, `ClassifyContent` | give a package entry its kind, extra search words and rarity tier |
+| `AddItemCategories`, `AddGuardianCategories`, `AddEntityCategories`, `AddContentCategories` | add `StudioCategory` records |
+| `ClassifyItem`, `ClassifyGuardian`, `ClassifyEntity`, `ClassifyContent` | give a package entry its kind, extra search words and rarity tier |
+
+An asset with no viewer goes to **All other assets**. Its **Category** there is the `category` of
+its class in the tag registry, set in `data/seed-registry.json`, such as `Texture` or `Material`.
 
 A `StudioCategory` names the kind prefix, the label, the group, the icon, the tooltip and its
 `Sections`: the page ids it shows first. `ModelPane` draws the preview beside the tabs.

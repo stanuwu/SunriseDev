@@ -1,6 +1,6 @@
 ---
 title: "World geometry and collision"
-date: 2026-10-15
+date: 2026-11-08
 description: "Static map instances, culling, occlusion tomes, level of detail, baked Havok collision, entity physics, hitboxes and the collision filter."
 weight: 86
 ---
@@ -26,7 +26,8 @@ names a paired bounds table (class `0x80809671`).
 | bounds table `+8` | `0x80809673` | 48 | local min, local max, a 64-bit visibility id at `+0x20` |
 
 The ranges partition the instance rows, and each range selects one resource. The Leviathan map has
-31 instance tables and 63,883 instance rows.
+31 instance tables and 63,883 instance rows. A drawn mesh's materials must be loaded with it; see
+[Static mesh materials](/docs/destiny-2/packages/#static-mesh-materials).
 
 ### The instance row
 

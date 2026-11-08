@@ -1,6 +1,6 @@
 ---
 title: "Settings, logs and in-game tools"
-date: 2026-10-15
+date: 2026-11-08
 description: "The settings file, the log and its format, and the in-game menu."
 weight: 20
 ---
@@ -23,17 +23,19 @@ If the file does not parse, Sunrise does not start. The reason goes to the debug
 
 ### The version key
 
-The root `version` key is the layout version of the file. This build expects `18`.
+The root `version` key is the layout version of the file. This build expects `19`.
 
-- A file with a lower version, or with no `version` key, is **deleted and replaced** by the
-  default file. Your changes in it are lost. Copy the values you want before you update.
+- A file at version `18` is upgraded in place. Sunrise rewrites it to `19` and keeps every value
+  you set. The debugger output gets `ev=settings stage=upgrade result=ok`.
+- A file below `18`, or with no `version` key, is **deleted and replaced** by the default file.
+  Your changes in it are lost. Copy the values you want before you update.
 - A file with a higher version is still read. A mismatch line goes to the debugger output.
 
 ### Layout
 
 ```json
 {
-  "version": 18,
+  "version": 19,
   "core":   { "logging": { ... }, "activity_sdk_generation": { ... }, "studio_attach": false },
   "steam":  { "language": "...", "user": { ... } },
   "client": { "ui": { ... }, "external_server": { ... }, ... },
@@ -62,7 +64,8 @@ Studio attaches through shared memory in the Windows session namespace. Only a p
 Windows session on this machine can reach it. There is no network path, so nothing remote can
 attach. With `studio_attach` off, Sunrise opens no Studio link and installs none of its hooks. With
 it on, Studio can read the camera, the world, placed objects, animation and the open CUI screens.
-It can also ask the game to reload a mod's mission scripts. See
+It can also ask the game to reload a mod's mission scripts and packages, and to set a forced
+destination for Reload bubble. See
 [The Sunrise Studio link](/docs/sunrise/architecture/#the-sunrise-studio-link).
 
 ### Steam
@@ -88,7 +91,8 @@ language come from its own Steam depot; see
 | `client.socket_menu_routing` | bool | `false` | moves four leg mods into the leg mod menu |
 | `client.reveal_lore_books` | bool | `true` | clears the visibility gates on lore book entries |
 | `client.cheats` | bool | `false` | unlocks the cheat tools; the session then saves no progress |
-| `client.dump_package_keys` | bool | `false` | exports the installed package keys for Sunrise Studio during startup |
+| `client.exports.package_keys` | bool | `false` | exports the installed package keys for Sunrise Studio during startup |
+| `client.exports.tag_definitions` | bool | `false` | exports the game's tag definitions for Sunrise Studio during startup |
 | `client.external_server.enabled` | bool | `false` | sends the game's traffic to another server instead of answering it in process |
 | `client.external_server.host` | string | `"127.0.0.1"` | that server's IPv4 address; a host name is refused |
 | `client.external_server.config_url` | string | `"https://127.0.0.1/config/"` | the config URL handed to the game; must be a route that server serves |
@@ -96,10 +100,15 @@ language come from its own Steam depot; see
 
 `toggle_key` accepts `insert`, `home`, `end`, `delete` and `f1` to `f12`.
 
-To prepare an install for Sunrise Studio, set `client.dump_package_keys` to `true` and start the
+To prepare an install for Sunrise Studio, set `client.exports.package_keys` to `true` and start the
 game once. Sunrise writes `bin/x64/Sunrise/exports/package_keys.bin` after its package reader is
 ready. Studio reads that file from the selected install. Set the option back to `false` after the
 file appears. Leaving it on replaces the same file on each successful startup.
+
+`client.exports.tag_definitions` works the same way. Sunrise writes
+`bin/x64/Sunrise/exports/tagdefs-raw.<id>.json`, where `<id>` is the start of the game executable's
+SHA-256. Studio's tag registry is generated from this file. The export runs in the background, so it
+can finish a few seconds after startup. The log line `ev=tagdefs_dump` reports the result.
 
 The cheat tools are Teleport, Noclip, Fly and Sword Skate Fix on the Movement page, and Infinite
 Ammo on the Player page. With `cheats` off they are locked and read as off, whatever `movement.json`
@@ -216,11 +225,11 @@ To find problems, search for `result=fail`, `level=error` and `level=warn`.
 
 ### Log levels
 
-There are four levels, from most to least severe: `error`, `warn`, `info`, `debug`. The fifth
-value, `off`, drops the channel.
+There are five levels, from most to least severe: `error`, `warn`, `info`, `debug`, `trace`. The
+sixth value, `off`, drops the channel.
 
 Each channel has its own threshold. A line is kept when its level is at or above the threshold.
-So `warn` keeps errors and warnings, and `debug` keeps everything.
+So `warn` keeps errors and warnings, and `trace` keeps everything.
 
 An unknown channel name in `levels` is skipped. An unknown level name is a parse error, so Sunrise
 does not start.
@@ -257,8 +266,12 @@ For the mission script lines and what they mean, see
 
 ## The in-game menu
 
-Press **Insert** to open or close the menu. The key is `client.ui.toggle_key`. The menu starts
-closed. With `client.ui.enabled` set to `false`, the key does nothing.
+Press **Insert** to open or close the menu. The key is `client.ui.toggle_key`. The menu also has a
+close button. The menu starts closed. With `client.ui.enabled` set to `false`, the key does nothing.
+
+At startup a hint names the key: "Press INSERT to open the Sunrise overlay". It shows 2 seconds
+after the HUD first draws and goes 30 seconds later, or as soon as the menu opens. It does not come back
+in the same run. The HUD page can turn it off.
 
 The left column lists the pages, in this order: client pages, then server pages, then Core pages.
 
@@ -273,6 +286,24 @@ The left column lists the pages, in this order: client pages, then server pages,
 | Mods | Core | every mod folder: loaded mods in load order, then refused ones with each reason ([Mods](/docs/sunrise/mods/)) |
 
 Changes on the Movement, Player and HUD pages save at once and survive a restart.
+
+### The Activity Launcher
+
+The Activity Launcher starts an activity from orbit through the game's own launch path.
+
+- The library groups activities by first release: **All content**, **Expansions**, **Seasons** and
+  **Events**. A search box searches every activity by name, package, index or hash.
+- Equal launch variants share one card. The detail view has a **Variant** list when there are
+  several. **Include unavailable scenarios** also lists activities with no scenario installed.
+- **Launch activity** launches the selected variant with its own arrival.
+- **Manual Mode** in the detail view, and the **Custom Launch** card, pick the activity, its launch
+  route, and the arrival: **Bubble**, **Slice** and **Spawn**. A spawn of "Client picks" leaves the
+  spawn point to the game.
+
+A manual launch sets a forced destination. Every later launch lands there until you press **Clear
+active override**. While one is active, a normal launch is disabled. The forced destination is held
+in memory only, so a restart clears it. Studio's Reload bubble sets one too; see
+[Package changes in a running game](/docs/sunrise/mods/#package-changes-in-a-running-game).
 
 ### Activity Host windows
 
@@ -292,6 +323,7 @@ Overlays draw in the top-left corner, with the menu open or closed.
 | overlay | starts | shows |
 |---|---|---|
 | Sunrise Card | on | the Sunrise name, version and logo |
+| Startup Hint | on | the menu key, for 30 seconds after startup |
 | Current Status | off | activity, bubble, slice set and closest spawn, each line switchable |
 | Session | off | the instances of your current session |
 | Client Activity Messages | off | recent client messages at the Activity Host |

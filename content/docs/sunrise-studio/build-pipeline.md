@@ -90,7 +90,8 @@ source misc region, apart from dependency record edits.
 Each built package gets a `<stem>.merge` file beside it. Startup `_unp1_` replacements get none.
 Sunrise uses it to merge the package with other mods' patches of the same package.
 [Two mods patching one package](/docs/sunrise/mods/#two-mods-patching-one-package) says how. The
-binary layout is version 2, defined in Sunrise's `table_merge/sidecar.h`.
+binary layout is version 3, defined in Sunrise's `table_merge/sidecar.h`. Sunrise still reads
+version 2 files.
 
 The file gives each edited entry one kind:
 
@@ -107,7 +108,13 @@ arrays, or a removed row, makes it opaque. A same-size entry outside the list ha
 mods' edits to different 8-byte words of it both apply.
 
 Table, opaque and added entries also list each field that names a row this build added. A field
-that names an installed row, or holds `0xFFFF` for none, is not listed.
+that names an installed row, or holds `0xFFFF` for none, is not listed. Each listed field records
+its width, 1, 2 or 4 bytes, the width the registry gives the field. Sunrise applies each field at
+the width its file records.
+
+Some rows point at a record outside every array, as an activity row does. The file lists the
+pointers in such a record, so Sunrise can rewrite them when it moves a mod's record. Version 2 has no
+such records.
 
 These installed tables merge by appended rows:
 
@@ -134,16 +141,22 @@ These installed tables merge by appended rows:
 | vendor index | `0x8131931D` | 32,767 | vendor |
 | vendor display index | `0x81A2926D` | 32,767 | vendor |
 | string bank index | `0x81A27211` | 32,768 | |
+| activity definitions | `0x81327CF0` | 4,095 | activity |
+| activity texts | `0x81327D35` | 4,095 | activity |
+| destinations | `0x81327CDA` | 256 | destination |
+| destination texts | `0x81327D6B` | 256 | destination |
 
 Tables in one pair group must grow by the same count. A build that breaks this stops. Item hashes,
-collectible hashes and bank name hashes are marked unique.
+collectible hashes, bank name hashes, activity hashes and destination hashes are marked unique.
 
 These installed tables merge as sorted maps, keyed by the u32 at row `+0`: the runtime name map
 `0x80EC3F60`, the art name map `0x80EC3F61` and the HUD icon library `0x80EFC07B`.
 
-`SunriseStudio.Projects/TableMergeRecipes.cs` holds both lists and the rules that find row
-references. Each build also writes `merge-sidecars.json`, a readable copy of every `.merge` file with
-each entry's kind and the reason an entry is opaque.
+`data/merge-annotations.json` in the Studio source holds both lists, the rules that find row
+references, and the `.merge` layout, by registry name. Studio's recipe code and Sunrise's
+`table_merge/generated/sidecar_format.h` are generated from it. Each build also writes
+`merge-sidecars.json`, a readable copy of every `.merge` file with each entry's kind and the reason
+an entry is opaque.
 
 ## The build receipt
 
@@ -180,7 +193,13 @@ game. A project with only scripts or SDK modules installs without building packa
 | `.merge` files | beside their package |
 | Lua controllers and helpers | `scripts` |
 | own SDK modules | `sdk` |
+| activity SDK rows of the project's destinations | `activity_sdk.pack` |
 | mod details | `mod.json` |
+
+A build of a project with a destination also writes `activity_sdk.pack`. A destination copies an
+installed scenario, so its rows are that scenario's rows in the installed activity SDK, cut to the
+kept bubbles, renumbered, and moved to the project's tags. The build needs the installed SDK: start
+the game once with Sunrise before the first build.
 
 The install writes only under `bin/x64/Sunrise/mods`, never into `packages`. It keeps an ownership
 receipt of the script files it installed, so **Update running game** can replace and remove its own
@@ -188,13 +207,47 @@ files and leave files added by hand.
 
 ## Updating a running game
 
-**Update running game** builds the same way, replaces only the changed script files, then sends one
-`reload_mod` command over the command link. [The live link](/docs/sunrise-studio/live-link/#command-link)
-describes the command.
+### Own packages and the reference map
 
-Only scripts reload. The game reads packages, patches, SDK modules and `mod.json` once at boot. If
-any of them changed, the update stops and asks for **Build and install** with the game closed. The
-mod must be installed once before it can be updated. Exactly one game must run from this
+The build lists the new package IDs the mod ships in `mod.json` as `"packages"`, which needs
+`manifestVersion` 4. It also writes `refmap.bin`: every place in the mod that holds one of its
+own tags or package IDs.
+
+- Tag references the registry types, in new entries and in patched installed entries.
+- Named tags and wide-hash aliases in each new package's misc region.
+- Package IDs in dependency records and root manifests.
+- Hex literals in mission scripts and SDK modules, by file, line and column.
+
+If an own tag sits in a field the registry does not type as a reference, the build stops with
+**Unresolved own-hash occurrence** and names the tag and offset. A loader could not move it.
+
+When another mod or the installation already uses one of the mod's package IDs, Sunrise moves the
+mod to a free ID. It writes moved copies of the mod's packages under `cache/mods/remap`, warns
+naming both sides, and keeps the move in `mod_remaps.json` so the IDs stay the same next time. A
+mod without `refmap.bin` is refused as before. A mod whose scripts name its own tags is refused
+too, since Sunrise does not move script copies yet.
+
+**Build and install** also writes `.studio-live.json` into the mod folder. It records the SHA-256
+and size of each entry the mod serves, by package file.
+
+**Update running game** builds the same way, then compares each entry with that record.
+
+- A package with changed entries is written as its next generation, `<family>_<n+1>.pkg`, in the
+  same folder as the earlier one. It holds only the entries that changed since that one. An entry
+  reverted to its installed bytes is written again with those bytes. Earlier generations are never
+  rewritten, since the game may hold them open.
+- The record is saved after each file, so it always names files that exist.
+- Studio then sends `patch_tags` when any changed tag carries patch ranges, else
+  `reload_tags`, and `reload_mod` when scripts changed.
+  [The live link](/docs/sunrise-studio/live-link/#command-link) describes both commands.
+
+A full build of the same project serves the same bytes as the chain of generations.
+
+The game reads SDK modules, `activity_sdk.pack`, `mod.json` and the list of packages once at boot.
+A changed `activity_sdk.pack`, a new package, a new entry, a package the project no longer builds or
+a dependency record change also needs a restart.
+In those cases the update writes nothing and asks for **Build and install** with the game closed.
+The mod must be installed once before it can be updated. Exactly one game must run from this
 installation.
 
 ## Limits

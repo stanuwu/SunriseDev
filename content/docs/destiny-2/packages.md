@@ -1,7 +1,7 @@
 ---
 title: "Packages"
-date: 2026-10-15
-description: "The Tiger package format: file names, header, entry table, blocks, named tags, and how entries get loaded."
+date: 2026-11-08
+description: "The Tiger package format: file names, header, entry table, blocks, named tags, how the client registers packages, and how entries get loaded."
 weight: 10
 ---
 The game keeps its content in `.pkg` files, called packages. A package holds many entries. Each
@@ -190,8 +190,8 @@ start_offset = ((block_info >> 14) & 0x3FFF) << 4;   /* byte offset in that bloc
 size         = block_info >> 28;                     /* entry size in bytes */
 ```
 
-`type_info` carries a file type in bits 9 to 15 and a subtype in bits 6 to 8. This split is not
-verified against the client. The other bits are unknown.
+`type_info` carries a file type in bits 9 to 15 and a subtype in bits 6 to 8. This split is
+unverified against the client. The other bits are unknown.
 
 In the later layout, `reference` is the tag's class. In the 2017 layout it is often a tag that
 points at a descriptor entry instead.
@@ -373,6 +373,41 @@ The lookup binary-searches this array. So a name can be in this index and not in
 table, and the other way round. For example, `player_globals` is only in the client's index.
 [Tags, classes and definitions](/docs/destiny-2/tags-and-definitions/#name-hashes) gives the hash.
 
+## How the client registers packages
+
+The client registers every package file at boot, before it loads any entry.
+
+- The three `_unp1_` packages register from local disk in `bootflow:bootload`. The content
+  configuration does not list them.
+- Every other package file is a row in the content configuration that SignOn delivers (see
+  [From launch to orbit](/docs/sunrise/boot-and-sign-in/)). There is
+  one row per patch file, every patch included. The client keeps the highest patch per package id.
+- `bootflow:package_registration` runs one registration job per row and waits until all of them
+  finish.
+
+A row carries the file name with its patch suffix, the package id and the expected file size. The
+client cuts the name down to its bare stem, so a row cannot point outside the `packages` folder. It
+then opens `packages\<stem>.pkg` under the game folder.
+
+| result | the job fails when |
+|---:|---|
+| -81 | the file cannot be opened or read |
+| -88 | `file_size` differs from the row's size |
+| -87 | `locale_check` differs from the value the client computes |
+| -91 | `package_id` differs from the row, when that check is on |
+| -90 | `group_id` differs from the row, when that check is on |
+| -93 | the header signature fails |
+| -61 | the package id is out of range |
+
+A failed job stops the boot with `Patchable package registration failed with result (<n>)`.
+
+The client caches the headers it read in `cache_phr_*.dat` in the game folder. The file name is
+tied to the content configuration's identity. If the list of packages changes but that identity
+does not, the client replays the stale cache and registers nothing new.
+
+A package file written after boot is never registered. So an entry that unloads always reloads
+from the files that were there at boot.
+
 ## How an entry gets loaded
 
 The client never loads a whole package. An entry loads in one of three ways:
@@ -455,6 +490,14 @@ may reference it, but it never belongs in a manifest. No installed manifest list
 entries exist and none appears in any of the 1,191,098 manifest groups. The loader reads a streamed
 entry's owner record without a null check, so listing one as resident is a crash risk. That a listed
 streamed entry reaches that read is unverified.
+
+### Static mesh materials
+
+A static mesh, class `0x808071A7`, names its materials and its mesh data tag. The load set must
+hold both, and each material's own closure. A mesh whose material nothing loads draws with a null
+material. The draw reads that material's `+0x48` with no null check and faults on a worker. The
+main thread then waits on the job forever, and the screen stays black after
+`activity:initial_slice_set_loading`. Nothing reaches the retail log.
 
 ## What the families hold
 

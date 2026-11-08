@@ -1,6 +1,6 @@
 ---
 title: "How Sunrise is built"
-date: 2026-10-15
+date: 2026-11-08
 description: "The parts, threads and startup order of the Sunrise DLL."
 weight: 10
 ---
@@ -93,7 +93,7 @@ The client layer is the only layer that reads or changes the game's code.
 | `hooks/` | every hook; see [Client hooks](/docs/sunrise/client-hooks/) |
 | `network/` | `consumer.h`, the request types the hooks hand to the server |
 | `content/` | workers that read the installed packages and build caches and the activity SDK |
-| `diagnostics/` | the game side of the [Sunrise Studio link](#the-sunrise-studio-link): camera, world, object, animation and CUI screen data |
+| `diagnostics/` | the game side of the [Sunrise Studio link](#the-sunrise-studio-link): camera, world, object, animation and CUI screen data; and the input guards of a test process |
 | `activity/` | the mission launcher, which starts an activity through the game's own entry points |
 | `movement/`, `player/` | the saved values of the Movement and Player pages, and the player position |
 | `graphics/`, `input/` | display setup under Wine, and the game window's focus |
@@ -156,7 +156,7 @@ The server answers the game. It reads requests, asks state, and uses middleware 
 | `activity/` | the Activity Host and the mission script runtime |
 | `gameplay/` | the gameplay UDP endpoint and its peer protocol |
 | `runtime/` | the server thread and its service slice |
-| `studio/` | the command side of the [Sunrise Studio link](#the-sunrise-studio-link): mod script reloads |
+| `studio/` | the command side of the [Sunrise Studio link](#the-sunrise-studio-link): mod script and package reloads, tag patches, Reload bubble |
 | `ui/` | the Activity Host menu page and its World and Packets windows |
 
 See [The Activity Host](/docs/sunrise/activity-host/) and [Mission scripting](/docs/mission-scripting/).
@@ -197,13 +197,15 @@ Sunrise keeps its files in one folder, `Sunrise`, beside the DLL. For a normal i
 | `settings.json` | the settings; see [Settings, logs and in-game tools](/docs/sunrise/settings-and-logs/) |
 | `logs/sunrise.log` | the log, when the file log is on |
 | `cache/` | caches built from the installed packages and mod packages |
-| `cache/mods/` | merged and configured mod package files |
+| `cache/mods/` | merged and configured mod package files; `cache/mods/remap/<mod id>/` holds packages moved to free IDs |
 | `data/investment.sqlite3` | the persistent SQLite database |
 | `sdk/` | the generated activity SDK, with `sdk/catalog.bin` and `sdk/lua/` |
 | `scripts/` | your mission scripts |
 | `mods/` | installed mods, one folder each; Sunrise creates the folder |
 | `mod_config.json` | the mod config values changed on the Mods page |
-| `exports/package_keys.bin` | the package keys for Sunrise Studio, when `client.dump_package_keys` is on |
+| `mod_remaps.json` | the free package IDs Sunrise moved mods to; see [When a package ID is taken](/docs/sunrise/mods/#when-a-package-id-is-taken) |
+| `exports/package_keys.bin` | the package keys for Sunrise Studio, when `client.exports.package_keys` is on |
+| `exports/tagdefs-raw.<id>.json` | the tag definitions for Sunrise Studio, when `client.exports.tag_definitions` is on |
 | `movement.json`, `player.json`, `hud.json`, `world_markers.json` | values saved by the menu pages; see [Values the menu saves](/docs/sunrise/settings-and-logs/#values-the-menu-saves) |
 
 ## Startup order
@@ -382,12 +384,23 @@ mapping when Studio's heartbeat goes stale. The link is off unless `core.studio_
 |---|---|---|---|
 | camera, world, object and animation links | `src/client/diagnostics/studio/` | the game's camera callback | publishes snapshots; reads only |
 | CUI link | `src/client/diagnostics/studio/` | the game's UI frame, after the game's own UI update | copies the open CUI screens and one widget tree; reads only |
-| command link | `src/server/studio/` | the server thread, right before the mission scripts run | takes a `reload_mod` request and answers it once |
+| command link | `src/server/studio/` | the server thread, right before the mission scripts run; tag requests run on a worker thread | takes one request at a time and answers it once |
 
-A `reload_mod` request names one mod. The mod must have loaded this session. The command link hands
-it to the mission runtime, which reloads the scripts of that mod and of the mods that depend on it.
-The answer comes after every affected mission reaches a safe point. The **Reload script** button on
-the Script page of the World window uses the same path for every running script. The reload rules are in
-[Debugging a script](/docs/mission-scripting/debugging/).
+The command link takes five kinds of request. Each names one mod. `reload_mod`, `reload_tags` and
+`patch_tags` need that mod to have loaded this session.
+
+| request | what Sunrise does |
+|---|---|
+| `reload_mod` | hands it to the mission runtime, which reloads the scripts of that mod and of the mods that depend on it; the answer comes after every affected mission reaches a safe point |
+| `reload_tags` | reloads the packages of every mod and answers for each changed tag |
+| `patch_tags` | the same, and also keeps the new numbers of each tag for its next load, or writes them into the copy the game holds |
+| `query_resident` | says for each tag whether the game holds it now, with a CRC-32 of its bytes |
+| `reload_bubble` | sets a forced destination to the bubble the player is in now |
+
+After a tag request, Sunrise drops the build data the changed tags feed, so it is rebuilt from the
+new packages. The answers are in
+[Package changes in a running game](/docs/sunrise/mods/#package-changes-in-a-running-game). The
+**Reload script** button on the Script page of the World window uses the `reload_mod` path for every
+running script. The script reload rules are in [Debugging a script](/docs/mission-scripting/debugging/).
 
 The mapping names, layouts and timings are on [The live link](/docs/sunrise-studio/live-link/).

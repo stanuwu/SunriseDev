@@ -1,6 +1,6 @@
 ---
 title: "The platform layer"
-date: 2026-10-15
+date: 2026-11-08
 description: "The engine's own operating-system layer: threads, locks, time, memory, files, sockets, input, audio, crash handling and the retail log."
 weight: 10
 ---
@@ -177,8 +177,9 @@ connect, bind, sendto and others. It has 52 call sites. The Destiny 2 PC build h
 - **Keyboard and mouse**: no library is imported. The engine still carries an unused mouse data
   path; see [Compared with Destiny 2 PC](/docs/destiny-1/compared-with-pc/#mouse-and-keyboard).
 - **Audio**: only Wwise calls the PS4 audio output and the ATRAC9 decoder. Wwise opens one output
-  port: 1,024 frames a buffer, 8-channel float, about 47 buffers a second. Orbit and patrol audio
-  does not use the ATRAC9 decoder.
+  port: 1,024 frames a buffer, 8-channel float, about 47 buffers a second. Every sound entry in
+  the newest package files is a Vorbis `.wem`, 159,964 in all, and none is ATRAC9. The game sets up
+  the ATRAC9 decoder, but in title, orbit and patrol runs it never decodes with it.
 - **Game volume**: an account setting the server keeps, in the account's profile block. A block
   that was never saved is all zero. The client reads that as Game volume off, so the world is
   silent.
@@ -208,5 +209,4 @@ connect, bind, sendto and others. It has 52 call sites. The Destiny 2 PC build h
 - The 53 synchronous file functions beyond open.
 - Voice chat, PlayGo, downloadable content mounts and the NP calls the engine makes itself.
 - The system calls of the bundled C library and Fios2.
-- Which Wwise software codecs carry the orbit and patrol audio.
 - What a retail server stored in a new account's profile block.

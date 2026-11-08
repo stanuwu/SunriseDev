@@ -1,6 +1,6 @@
 ---
 title: "The world model"
-date: 2026-10-15
+date: 2026-11-08
 description: "Activity, scenario, state, region, slot, squad: the words the other pages use."
 weight: 20
 ---
@@ -81,6 +81,7 @@ The slot type decides which methods work. Calling a method on the wrong type is 
 | 23 | device (door, lift, lever, shield) | `D_` | `transition`, `set_channel`, `applied` |
 | 30 | player occupancy monitor | `PM_` | `set_occupancy_condition` |
 | 31 | player trigger | `PT_` | `fire_trigger`, `disarm_trigger` |
+| 32 | volume toggle | varies | `set_volume_active` |
 | 34 | object filter | `OF_` | `set_object_filter` |
 | 35 | hard-wipe globals (darkness zone) | varies | `set_darkness_zone` |
 | 37 | map generator | `MAP_GENERATOR_SENSOR_...` | `generate_map` |

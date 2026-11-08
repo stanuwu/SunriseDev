@@ -1,6 +1,6 @@
 ---
 title: "Network stack"
-date: 2026-10-15
+date: 2026-11-08
 description: "The client's network protocols: SignOn, the bdLobby services, the web-service RPC, replicated objects, matchmaking and the peer transport."
 weight: 60
 ---
@@ -282,6 +282,19 @@ that update must follow. A reply to anything else sends -1, including an error r
 
 Replies 1103, 2200 and 2300 write the same 37 bits inline instead of inheriting the pair. Their second
 field is not a revision, and the client does not wait on it.
+
+### Change character, opcode 505
+
+The 505 request is one zero byte. It names no character. The reply carries only the status and a
+family-4 revision. No per-request callback runs on it.
+
+The change itself is the family-4 update at that revision. It clears the selected character id at
+account `+1832`. The client then sends the boot back through step 28, then runs from step 23 to
+step 27, character select. An update at that revision with no objects leaves the client in orbit.
+
+The character object has one slot on the client. To select a different character, a server
+deletes the old character object before it writes the new one. An upsert into the occupied slot
+fails with `queuez` error 4.
 
 ## Replicated objects, service 123
 

@@ -1,6 +1,6 @@
 ---
 title: "The Activity Host protocol"
-date: 2026-10-15
+date: 2026-11-08
 description: "How the client talks to the Activity Host: the envelope, the message ids, slots, and the Auth and Sense tables."
 weight: 50
 ---
@@ -951,7 +951,16 @@ what each trigger is:
 
 The Sense echoes the generation, raises a completion latch when the scene reaches its end block, and
 lists the keys of the triggers that have fired. Whether an output fired inside the scene always
-reaches that list is not confirmed.
+reaches that list is unverified.
+
+A scene that spawns its own actors needs its type-1 squad in the dependency list. With an empty
+list the spawn is refused. The scene then spawns through the squad's type-2 slot, not through
+ordinary type-1 placement. Type-1 mode 3 keeps the squad's request without creating members, so
+the scene can use it.
+
+A teardown stops the scene's actions and participants and destroys the scene. It does not destroy
+its actors. They stay, released to ordinary squad behavior. Completion in the Sense does not prove
+that the scene controlled an actor.
 
 ## Where to read the code
 
@@ -975,7 +984,8 @@ The source is at [github.com/stanuwu/Sunrise](https://github.com/stanuwu/Sunrise
 - What the type-18 tail bool and int32 do.
 - Six unnamed `join_result` fields (10 to 13, 15, 16), and the meaning of field 14.
 - What reads the global selection record that type 17 fields `.16` to `.18` write.
-- The meaning of each type 1 `squad_sensor` Auth field.
+- The meaning of the type 1 `squad_sensor` Auth fields not listed on
+  [Actors and AI](/docs/destiny-2/actors-and-ai/#the-auth-body), such as `+0xB0`.
 - How long the client waits in `shutting_down` after message 15; the timer value is not readable
   statically.
 - Most Auth tables on this page are unverified against a live client.

@@ -17,7 +17,9 @@ The loading screen stays until the scene's geometry, materials, textures and sha
 camera starts 1.7 m above the player spawn, looking 10 m ahead along the spawn's heading. Choosing
 the map that is already open does not reload it.
 
-Hover a map row to see its bubble count and tag.
+Hover a map row to see its bubble count and tag. A destination the open project made is listed with
+the installed maps, and its mission with the installed missions. See
+[Author map content](/docs/sunrise-studio/new-map/#open-your-destination).
 [Use the camera](/docs/sunrise-studio/camera/#teleport-to-a-spawn-point) shows how to jump to
 another spawn.
 

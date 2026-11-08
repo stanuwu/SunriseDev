@@ -49,7 +49,7 @@ changed, such as `steam.language`, and set them again afterwards. See
 
 Studio cannot read the game's packages until Sunrise exports their keys. You do this once.
 [Export package keys once](/docs/sunrise-studio/getting-started/#export-package-keys-once) has the
-steps: turn on `dump_package_keys`, start the game once, then turn it off again.
+steps: turn on `client.exports.package_keys`, start the game once, then turn it off again.
 
 ## Build Studio
 

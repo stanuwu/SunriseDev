@@ -217,10 +217,25 @@ new request.
 
 ## Command link
 
-**Update running game** uses the command mapping. It does not need Attach, and it is the one link that
-changes game state. Studio creates the mapping for one request and releases it after the reply.
+**Update running game** and **Reload bubble** use the command mapping. It does not need Attach, and
+it is the one link that changes game state. Studio creates the mapping for one request and releases
+it after the reply.
 
-It sends one command, `reload_mod`. The game prepares replacements for the started, bound mission
+| command | what the game does |
+|---|---|
+| `reload_mod` | reloads the mod's mission scripts |
+| `reload_tags` | loads the mod's new package generations, then answers for each changed tag |
+| `patch_tags` | `reload_tags`, then writes the patch ranges into each tag when the client loads it, and poke-safe ranges into the tags it holds now |
+| `reload_bubble` | makes the next launch land in the player's current bubble |
+| `query_resident` | answers whether the client holds each tag, with the crc32 of its bytes. Studio does not send it yet |
+
+The protocol is version 2. Studio sends `reload_mod` as version 1, so an older game still
+answers it.
+An older game does not answer the other commands; Studio stops waiting after 10 seconds.
+
+### reload_mod
+
+The game prepares replacements for the started, bound mission
 programs owned by that mod or by mods that depend on it. The game answers once, after the mission
 reaches a safe point. Studio waits up to 30 seconds.
 
@@ -242,7 +257,58 @@ editor cannot replace a running request. If the game still holds the last mappin
 | compile error | a script did not compile; the old program keeps running |
 | failed | the game could not reload the mod |
 
-Only scripts reload. The game side may not work with Studio.
+### reload_tags
+
+The tag list goes in a second mapping, `Local\SunriseStudio.Manifest.<editor pid>.<request>`.
+Studio creates it before it writes the request and keeps it until the reply. It holds up to
+65,535 tags and 16 MiB.
+
+```c
+struct ManifestHeader {      // 64 bytes
+    uint32_t magic;          // 0x464D5353, ASCII "SSMF"
+    uint16_t version;        // 1
+    uint16_t reserved;
+    uint32_t request;        // the command's request id
+    uint32_t count;          // tags
+    uint32_t generation;     // the mod's live revision
+    uint32_t patchBytes;
+    uint64_t entriesOffset;  // count Entry rows, 32 bytes each
+    uint64_t patchOffset;    // patch ranges, read by patch_tags
+    uint64_t resultsOffset;  // count Result rows, 8 bytes each, written by the game
+    uint8_t  pad[16];
+};
+```
+
+The game restages every package of the mod against the installed packages, with the same checks as
+at boot. If that fails, every tag is refused and the old data stays. Otherwise it serves the new
+generations to its own readers, drops the spawn sets, scenario layouts and vendors the tags feed so
+the next read rebuilds them, and writes one result per tag. Studio waits up to 10 seconds.
+
+### patch_tags
+
+A patch entry carries ranges. Each is an offset, a length, the CRC-32 of the bytes it replaces, then
+the new bytes padded to 4. The CRC-32 is the IEEE one, reflected, with all-ones start and end.
+
+The game keeps every patch entry until it restarts. Each time the client loads that tag, the game
+writes the ranges into it before the tag is read. An entry that is not flagged poke-safe answers
+**need Reload bubble**. So does a poke-safe entry whose tag the client does not hold now.
+
+For each entry flagged poke-safe and layout-preserving, the game also finds the copy it holds,
+checks the class and every range against that copy, and only then writes. It checks the bytes again
+for half a second and writes again if the game moved the copy meanwhile. A tag flagged spawn-time
+answers **next spawn**.
+
+| result | Studio shows | meaning |
+|---|---|---|
+| applied (tier 2) or next spawn (tier 3) | applied, next spawn | the copy holds the new bytes |
+| guard mismatch | changed in the game | the copy holds other bytes; nothing was written |
+| needs bubble reload | need Reload bubble | the patch is kept and written when the client next loads the tag |
+| not resident | not loaded | the client does not hold the tag now; only `query_resident` answers it |
+| refused | refused | another class, a range outside the tag, or a write that did not hold |
+| needs restart | need a restart | not Sunrise data and not patched; the client loads it only at startup |
+
+The patch at load is tested in a running game, for a moved static. Writing into the copy the client
+holds now is unverified in a running game.
 
 ## Performance
 

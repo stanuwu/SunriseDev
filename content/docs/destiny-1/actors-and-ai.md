@@ -1,6 +1,6 @@
 ---
 title: "Actors and AI"
-date: 2026-10-15
+date: 2026-11-08
 description: "The action system and animation rig from Bungie's SIGGRAPH 2014 course, and what the PS4 client shows about factions and object filters."
 weight: 50
 ---
@@ -36,7 +36,9 @@ axes are assumed from the content.
 
 Destiny 2's action kinds appear to keep the course's list in the same order, with new kinds
 inserted. That is assumed from the order alone. Destiny 2's kinds are in
-[Actors and AI: Action kinds](/docs/destiny-2/actors-and-ai/#action-kinds).
+[Actors and AI: Action kinds](/docs/destiny-2/actors-and-ai/#action-kinds). Destiny 2's rule
+table gives ignore, simultaneous and interrupt results, the same as the course's first three rules;
+see [Action rules](/docs/destiny-2/actors-and-ai/#action-rules).
 
 ## The animation rig
 

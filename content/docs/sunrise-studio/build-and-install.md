@@ -1,6 +1,6 @@
 ---
 title: "Build and install a mod"
-description: "Build a project, install it as a Sunrise mod, and reload its scripts in a running game."
+description: "Build a project, install it as a Sunrise mod, and update a running game."
 weight: 240
 group: "Guides"
 ---
@@ -66,34 +66,71 @@ files, the install fails. Close the game and install again.
 
 ## Update a running game
 
-**Update running game** sends script changes to a game that is already running. It does not need the
-Live tab.
+**Update running game** sends changed scripts and changed package data to a game that is already
+running. It does not need Attach on the Live tab.
 
 Before the first update:
 
-1. Install the mod with **Build and install**.
+1. Install the mod with **Build and install**. A mod installed by an older Studio has no live state;
+   install it once more.
 2. In the game's `settings.json`, set `studio_attach` to `true`. See
    [Connect to a running game](/docs/sunrise-studio/live/#before-you-start).
 3. Start the game.
 
-To update:
+To update, save your mission scripts, then choose **Build > Update running game**. Or turn on
+**Live** on the Live tab: Studio then updates the game shortly after each change.
 
-1. Save your mission scripts.
-2. Choose **Build > Update running game**.
+Studio builds the project and compares it with what the installed mod serves.
 
-Studio builds the project, writes only the changed script files into the installed mod, and removes
-the scripts you deleted. Then it asks the game to reload the mod. The game swaps the scripts when
-each mission reaches a safe point. Studio waits up to 30 seconds. The status bar shows the game's answer.
+- Each package with changed entries is written as a new file, the next generation, beside the
+  earlier ones. Earlier files are never rewritten. The game then loads the new files and answers
+  for each changed tag.
+- Changed script files are replaced and deleted scripts removed. The game swaps the scripts when
+  each mission reaches a safe point. Studio waits up to 30 seconds.
+
+The status bar shows the game's answer. The Live tab lists each changed tag and its result:
+
+| result | meaning |
+|---|---|
+| applied, tier 1 | Sunrise uses the new data now: spawn tables, scenario layouts and vendors |
+| applied, tier 2 | the game wrote the new values into the copy it holds in memory |
+| next spawn | the same, for data the game reads when something spawns |
+| need Reload bubble | the game writes the new values into the tag the next time it loads it |
+| need a restart | the client loads this change only at startup; see below |
+| changed in the game | the game holds other bytes than Studio expected, so it wrote nothing |
+| refused | the game could not load the new files, or the patch does not fit; the old data stays |
+
+Studio sends a patch when every changed byte is a number and the tag keeps its size. A reference, a
+count or a changed size is never patched; it needs a restart.
+
+The game writes a patch into the tag each time it loads the tag, until it restarts. It also writes
+the patch into the copy it holds now (tier 2) when every changed number is in a part of a tag marked
+safe to patch. Damage scales, light rows, effect emitters, static transforms, placements and
+material techniques are marked. Whether each marked kind shows its change at once is unverified.
 
 Update running game writes nothing and asks for **Build and install** when any of these changed:
 
 - `mod.json`;
-- a package or a patch;
 - an SDK module;
-- whether the mod has a `scripts` folder.
+- `activity_sdk.pack`, which holds the activity SDK rows of the project's destinations;
+- whether the mod has a `scripts` folder;
+- a new package, a new entry in a package, or a package the project no longer builds;
+- a dependency record.
 
 If a script does not compile, the old scripts keep running. A mission that is not bound or not
 started yet needs an activity restart. This step is unverified end to end with Studio.
+
+### Reload bubble
+
+**Reload bubble** on the Live tab makes the next launch land in the bubble the player is in now. It
+sets a forced destination in Sunrise, which replaces where any launch lands. Leave the world, by
+going to orbit or by **Change Character** in the game menu, then launch again. Afterwards press
+**Clear active override** in Sunrise's mission launch panel.
+
+The new launch loads the bubble again, so a tag that says **need Reload bubble** shows its change.
+This is tested in game for a static moved in a project destination.
+The client reads its package list once, at startup, so a tag that says **need a restart** shows
+only after a game restart.
 
 **Build and install** and **Update running game** have no default keys. Set them in
 [Shortcuts and presets](/docs/sunrise-studio/shortcuts/).

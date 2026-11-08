@@ -1,7 +1,7 @@
 ---
 title: "Actors and AI"
-date: 2026-10-15
-description: "How client actors get commands and walk, action kinds, the authored squad spawner, and the class definitions objects are built from."
+date: 2026-11-08
+description: "How client actors get commands and walk, action kinds and rules, sequences, behavior programs, animation graphs, the authored squad spawner, and the class definitions objects are built from."
 weight: 90
 ---
 
@@ -260,6 +260,7 @@ whole player and AI action surface. A few:
 | 1 | `death` |
 | 23 | `grenade` |
 | 51 | `ai_sequence` |
+| 57 | `state_machine` |
 | 70 | `player_custom_interaction` |
 | 95 | `weapon_fire` |
 | 97 | `jump` |
@@ -268,6 +269,31 @@ whole player and AI action surface. A few:
 
 Only kind 70 is verified in the PC code. Several kinds share one implementation. These action kinds
 are not the actor command selectors. No mapping between the two is known.
+
+### Action rules
+
+An actor's action component decides what happens when a new action arrives while another runs. Its
+config selects a rule asset. The asset maps each kind to a group, and holds one rule per pair of
+groups, `rule[group(incoming)][group(running)]`. A kind with no group row is rejected before any
+rule.
+
+| result | effect |
+|---:|---|
+| 0 | no rule |
+| 1 | ignore |
+| 2 | simultaneous: both run |
+| 3 | interrupt: the running action is released |
+
+The component has two request queues, picked by bit 0 of the request's flags:
+
+| flag bit 0 | result 0 or 1 | result 2 | result 3 |
+|---|---|---|---|
+| clear | the incoming request is dropped | both run | the running action is released |
+| set | the running action is released | both run | the running action is released |
+
+So whether a request plays depends on what the actor runs now, not only on the request. For
+example, under one Cabal guard's rule asset, a running `state_machine` action is released by an
+`ai_sequence` request, and kinds with no rule against it are dropped.
 
 ## Temperaments
 
@@ -280,6 +306,94 @@ Two writers change the set at run time: a client atom in the `combatant_sensor` 
 packaged action that adds or removes one id. All 121 installed packaged actions remove; none adds.
 The installed ids are 0 to 12 and 14. No id has a known name, so none can be called neutral or
 hostile. No damage, hit, health or faction code writes the set.
+
+## Sequences and responses
+
+An actor plays named animations and voice lines through two kinds of tables. Both are package data,
+and both are found through the actor's own components.
+
+### Sequence tables
+
+A sequence key is looked up in the actor's global sequence table first, then in its local one. Both
+hold sorted 24-byte rows, element class `0x808081AE`:
+
+```c
+struct SequenceRow {             /* 24 bytes */
+    uint32_t key;                /* +0x00  FNV-1 of the sequence name; the sort key */
+    uint8_t  kind;               /* +0x04  native action kind byte */
+    uint8_t  pad[3];
+    int64_t  path_rel;           /* +0x08  self-relative pointer to the resource path */
+    uint32_t resource;           /* +0x10  sequence resource tag */
+    uint32_t pad2;
+};
+```
+
+Global tables have class `0x8080816C`, local tables class `0x8080815F`. An actor group config
+(class `0x80809C36`) selects the local table, a compact behavior program and the global table. The
+install holds 9 global and 354 local tables, with 2,174 rows. The path is metadata; the lookup uses
+only the key.
+
+A sequence resource names a config that pairs an animation action with a voice action. The two
+keys are independent. For example, `new_target` plays animation `new_target` and voice
+`target_sighted`.
+
+The kind byte matters only to command 87, which turns kind 1 or 2 into action kind 54 and kind 3 or
+more into kind 55. The `combatant_sensor` sequence atom always creates action kind 51,
+`ai_sequence`, whatever the row says. See
+[The Activity Host protocol](/docs/destiny-2/activity-host-protocol/#type-2-combatant_sensor).
+
+### Named responses
+
+A response is a voice line chosen by name. Command 6 plays a named response through one interface
+on the actor. A sequence's voice action uses the same call when its bank is -1. The actor update also sends some
+responses by kind: kind 35 once per new perceived target within 30 m, and kind 37. The response
+tables hold names such as `target_sighted`, `taunt`, `death` and `investigate`.
+
+## Actor behavior programs
+
+An actor group runs a compact behavior program, class `0x80806562`. Authored scenes run their own
+program of the same class in place of it while they control an actor. The header holds typed
+arrays:
+
+| element class | size | holds |
+|---|---:|---|
+| `0x8080825C` | 24 | a node: name hash, precondition expression, exit list, active and entry action lists |
+| `0x80808258` | 4 | an expression: first reference, count, op (one, not, and, or, action list) |
+| `0x80808294` | 4 | a leaf or expression index, and a nested flag |
+| `0x80808262` | 4 | a leaf: first parameter and a selector |
+| `0x80800007` | 4 | parameter values; `0x8080824D` holds one type byte per value |
+| `0x80800070` | 4 | the name pool |
+| `0x80808260` | 8 | tree links: node, first child, next sibling |
+| `0x8080825E` | 12 | chains; `+6` is the root node |
+| `0x808081B4` | 32 | sorted keys, with an optional resource tag at `+24` |
+
+A leaf's selector is a predicate inside a precondition or exit expression, and an actor command
+inside an action list. Parameter type 2 is a float. Type 4 is a comparison, 0 for less through 5
+for not equal.
+
+Parameter types 7 and 14 index the name pool and are used as written. Types 18 and 19 also index
+it, but a scene config rebinds them. Its binding table is a sorted array of 8-byte rows, class
+`0x808082BB`: a name hash, a `u16` count and a `u16` index into the config's own name pool. A count
+of zero means the program name is an internal port, not a name. So one program can serve several
+scenes, and each scene's config names the machine and events it drives.
+
+## Animation graphs
+
+An actor's animation component selects an animation definition, and that selects a graph. A graph
+holds groups. Each group is a list of states with transitions.
+
+| record | size | fields |
+|---|---:|---|
+| group | 56 | name hash at `+0`, state array at `+8` |
+| state | 80 | name at `+0`, flags at `+8`, animation index at `+16`, blend at `+20`, transitions at `+24` |
+| transition | 32 | target state at `+12`, offset to its condition at `+24` |
+
+A condition is an event or the end of playback. The event names are FNV-1 hashes, such as
+`exit_guarding` and `interrupted_combat`.
+
+An animation definition (class `0x808036F6`) also holds named rows of 32 bytes. Each row maps a
+name hash at `+0x10` to a clip index at `+0x18`. A clip lists its events. An event can name an
+audio event tag.
 
 ## The authored squad spawner
 
@@ -318,8 +432,9 @@ type-1 squad slot
            -> placed object identity and transform
 ```
 
-Some spawners carry their own single point instead of a rule reference. Tower vendors use that
-form.
+Some spawners carry their own point set instead of a rule reference. 3,815 installed type-1
+spawners take this form, the Tower vendors among them. Every one read so far holds one point, and
+that point is the spawner's own placement.
 
 ### The Auth body
 

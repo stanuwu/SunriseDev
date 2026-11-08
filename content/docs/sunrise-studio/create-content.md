@@ -16,7 +16,7 @@ opens in its category viewer.
 | a category list header | **New** (plus icon) and **Clone** (copy icon), at the right of the title |
 | a row's right-click menu | **Clone...**, with that row as the base |
 | the viewer toolbar, above the pages of the open asset | **New**, **Clone** (the open asset as the base) and **Edit** (pencil icon) |
-| the **All other assets** header | a **New** list: **Texture**, **Static prop** and **Clone material**, then the types Studio cannot write yet |
+| the **All other assets** header | a **New** list: **Texture**, **Static prop**, **Clone material**, **Destination** and **Activity**, then the types Studio cannot write yet |
 | **File > New mission script...** | the Mission Graph's **New mission script** dialog |
 
 **Clone** from a list header uses the open asset as the base when it belongs to that category.
@@ -60,7 +60,8 @@ for its package and tag. **Clear** removes the choice.
 
 Every workflow that adds entries asks for a **Package ID**. Entries with the same ID share one new
 package, so several workflows can use the same ID. The field starts with the last ID your project
-used, or `0AA0`. [Package IDs](/docs/sunrise-studio/project-storage/#package-ids) has the rule.
+used, or the next free ID of your mod. [Package IDs](/docs/sunrise-studio/project-storage/#package-ids)
+has the rule.
 
 ## Guides per category
 
@@ -76,6 +77,8 @@ used, or `0AA0`. [Package IDs](/docs/sunrise-studio/project-storage/#package-ids
 | Material | [Edit materials](/docs/sunrise-studio/materials/) |
 | Static prop | [Add a static prop](/docs/sunrise-studio/static-prop/) |
 | Mission script | [Script a mission](/docs/sunrise-studio/mission-graph/) |
+| Destination (in **All other assets**) | [Author map content](/docs/sunrise-studio/new-map/#create-a-destination-from-an-installed-one) |
+| Activity (in **All other assets**) | [Author map content](/docs/sunrise-studio/new-map/#add-an-activity-to-a-destination) |
 
 An asset with no category has **Clone** as a plain duplicate. It opens the **Add asset** dialog with
 the asset as the source and a **Create copy** button. The copy is stored as a delta of the asset. It
@@ -116,8 +119,6 @@ The **All other assets** **New** list shows these grayed out. Hover one for its 
 
 | type | reason |
 |---|---|
-| Activity | Activity creation is not supported yet. |
-| Map | Map creation is not supported yet. |
 | Animation | Edit clips of an existing rig with Import animation. |
 
 The Animation item points at **Assets > Import animation controls...**. See

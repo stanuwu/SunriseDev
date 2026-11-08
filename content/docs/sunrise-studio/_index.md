@@ -7,9 +7,10 @@ groups: ["Start here", "Guides", "How it works"]
 ---
 
 ### Warning
-> Studio is an alpha, and most of its edits may not work in game. One is checked: a scaled static
-> object on `pvp_sabre` loads, draws, collides and culls. A feature known to be broken or only partly working carries a **WIP** tag in Studio.
-> Hover the tag to see what is wrong.
+> Studio is an alpha, and most of its edits may not work in game. Two are checked: a scaled static
+> object on `pvp_sabre` loads, draws, collides and culls; and a destination copied from the EDZ,
+> with a static placed from a bundle, launches from Custom Launch. A feature known to be broken or
+> only partly working carries a **WIP** tag in Studio. Hover the tag to see what is wrong.
 
 Sunrise Studio is a Windows editor for the Destiny 2 build that Sunrise runs. It reads the packages
 of the installed game directly, so the game does not need to run. Studio shows maps, missions and
@@ -24,9 +25,10 @@ Start with [Getting started](/docs/sunrise-studio/getting-started/), then read
 |---|---|
 | Browse | browse by category, such as items and enemies, each with its own viewer; dress [guardians](/docs/sunrise-studio/guardians/) in armor; search any package entry by name or tag |
 | Maps and missions | open a whole map or mission in 3D with the game's own shaders |
-| Placement | move, rotate and scale placed objects and groups of them; edit trigger bounds |
+| Destinations | copy an installed destination with the bubbles you choose, as a new destination with its own free-roam activity |
+| Placement | move, rotate and scale placed objects and groups of them; copy or remove static objects; edit trigger bounds |
 | Collision | view, export and edit static collision; add new shapes |
-| Assets | read properties, references and bytes; edit fields Studio understands |
+| Assets | read properties, references and bytes; edit every field the tag registry describes |
 | Models | add static props from OBJ, glTF or Blender; replace a skinned model on an installed rig |
 | Materials and textures | change texture slots and constants; import PNG and DDS images |
 | Animation | play clips; edit dense control channels through glTF; animate an exotic weapon and its first-person arms in Blender |
@@ -36,12 +38,13 @@ Start with [Getting started](/docs/sunrise-studio/getting-started/), then read
 | Mission scripts | build and edit mission scripts as a node graph or as Lua |
 | Audio | play, export and audition Wwise audio; replace a weapon's sounds with WAV files |
 | Live | follow a running game: its camera, map, objects and animation |
-| Mods | build packages, install the project as a Sunrise mod, reload scripts in a running game |
+| Mods | build packages, install the project as a Sunrise mod, update a running game |
 
 ## What Studio cannot do
 
 - Create a new map, activity, combatant, audio bank or animation clip from nothing.
-- Place a new object in a map. A new static prop is a standalone model.
+- Place a new entity in a map. A new model can be placed only from a bundle, in a new destination.
+  A new static prop is a standalone model.
 - Author shaders.
 - Write into the game's `packages` folder. Inside the installation, Studio writes only into the
   Sunrise `mods` folder.
@@ -59,7 +62,8 @@ files and the key and decoder files it needs. Studio never changes the installed
 ### Project
 
 A project is a folder with a `sunrise.project.json` file. All changes live there. Without a project,
-Studio is view only. A project holds edits, not copies of game data.
+Studio is view only. A project holds edits, not copies of game data. The exception is a copied
+destination: its world tags are copies of installed tags, as loose tag files.
 
 ### Byte delta and object edit
 
@@ -67,7 +71,7 @@ Studio stores a change in one of two ways.
 
 | kind | holds | made by |
 |---|---|---|
-| object edit | new position, rotation, scale or trigger bounds for one world object | the placement editor, collision moves |
+| object edit | new position, rotation, scale or trigger bounds for one world object, or an added or removed static | the placement editor, collision moves |
 | byte delta | which bytes of an asset changed, as copy ranges and XOR masks | property edits, byte edits, imports, material and texture edits |
 
 Both are checked against the installed bytes. If the game files change, Studio refuses to build

@@ -63,8 +63,8 @@ fractions of screen height: **Units: fraction of screen height**. The other stor
 ## How it ships
 
 The build writes the bound defaults into your patch and records each site in `mod.json`. A mod with
-bindings uses manifest version 3. At startup, Sunrise writes the saved values into a private copy of
-each bound entry. [Mods](/docs/sunrise/mods/#package-config-bindings) has the loader's rules.
+bindings uses manifest version 3, or 4 when it also ships new packages. At startup, Sunrise writes
+the saved values into a private copy of each bound entry. [Mods](/docs/sunrise/mods/#package-config-bindings) has the loader's rules.
 
 ## Limits
 

@@ -1,6 +1,6 @@
 ---
 title: "How a script runs"
-date: 2026-10-15
+date: 2026-11-08
 description: "Callbacks, transactions, faults, limits, the sandbox and what survives a reload."
 weight: 30
 ---
@@ -49,6 +49,7 @@ Rules:
 | `on_event_client_state_changed` | the client sent a state report, or the host's arrival answer reached it |
 | `on_event_player_trigger` | an armed type-31 trigger reported the player |
 | `on_event_trigger_entered` / `on_event_trigger_exited` | a type-30 occupancy monitor changed |
+| `on_event_trigger_state` | a type-30 occupancy monitor sent a report, changed or not |
 | `on_event_squad_state` | a squad's alive count, slot counts, removal flag or objective costs changed |
 | `on_event_entity_spawned` | a squad member count rose |
 | `on_event_entity_died` | a squad alive count fell |
@@ -93,6 +94,7 @@ on the next change.
 | event | on the first report |
 |---|---|
 | `trigger_entered`, `trigger_exited` | silent |
+| `trigger_state` | fires; `continuity` is `baseline`, or `missing_counter` when the report has no record counter |
 | `scene_finished` | silent |
 | `scene_output` | silent; each output raises once per scene run, and a new activation token starts a run |
 | `objective_progress` | silent |

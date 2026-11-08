@@ -37,8 +37,15 @@ that category. [Create from a category](/docs/sunrise-studio/create-content/) ha
 6. To go back to the category list, press the Back icon next to the list title. This also clears
    the search and **Changed only**.
 
-Each search word must appear in the name, the kind, the extra names of the row, the package, the tag
-or the class hash. Extra names are, for example, a combatant name or a prompt.
+Each search word must appear in the name, the kind, the extra names of the row, the package, the
+tag, the class hash or the class names. Extra names are, for example, a combatant name or a prompt.
+The class names come from the tag registry: the class name, such as `s_static_mesh` or
+`item_definition`, its other names and its `.tft` type.
+
+A search that starts with `@` or `##0x` is a tag query. It lists the assets that hold a match. For
+example, `@<s_scenario>.bubbles[*]` lists every scenario with at least one bubble.
+[Path queries](/docs/sunrise-studio/edit-properties/#path-queries) has the syntax. A query that
+cannot run shows the reason next to the row count.
 
 In a category, item names are coloured by rarity. The second line of a row shows its type and its
 package. A type that repeats the name is left out. In search results, the second line also names
@@ -64,7 +71,7 @@ Some of these categories hold gameplay records:
 | **Icon** | icon containers, their bitmaps and icon libraries |
 | **Network** | class records and replication schemas of networked objects |
 
-Records Studio does not decode yet stay under **Other**.
+The tag registry gives each tag class its category. A class with no category stays under **Other**.
 
 **All categories**, **All types** and **All packages** remove a filter. The number next to the list
 title is the count of matching rows. A dot at the right of a row marks an asset the project changed.

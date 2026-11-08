@@ -154,8 +154,14 @@ Blender materials are previews built from the game's pixel shaders. They are not
 - Animated material values follow the timeline through a Scene Time node.
 - A part whose vertex shader moves it over time, such as an Ogre head's pulsing bulges, gets a
   **Shader motion** modifier. It runs the same offset before the armature and follows the timeline.
+- Shader math is grouped into vector, mix and clamp nodes. A 0 to 1 clamp of a vector is a color
+  Mix node named **Saturate** with Clamp Result on. The nodes run left to right in columns, from the
+  inputs to the material output.
+- A constant the shader reads unchanged from the material's template is wired to its native field.
+  Editing that field updates the preview.
 - Preview nodes that do not reach the material output are removed. The native texture slots and
-  constants stay unwired in a **Native fields (edit only)** frame. Edit them there.
+  constants the preview does not read stay unwired in a **Native fields (edit only)** frame. Edit
+  them there.
 - A material that draws with several blends gets a copy named `<material> [<blend>]`. Edit the
   original.
 - A part with no resolved material shows untextured and is left out of renders.

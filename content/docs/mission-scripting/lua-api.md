@@ -1,6 +1,6 @@
 ---
 title: "Lua API reference"
-date: 2026-10-15
+date: 2026-11-08
 description: "Every call a mission script can make, and every field an event carries."
 weight: 40
 ---
@@ -212,6 +212,7 @@ Every method below returns a RequestKey unless the table says otherwise.
 | `applied{channel}` | 23 | returns boolean; not a request |
 | `fire_trigger()` | 31 | arms the trigger |
 | `disarm_trigger()` | 31 | stops it reporting |
+| `set_volume_active{volume, active}` | 32 | `volume`: a type-60 slot handle on the toggle's own object; `active`: required boolean; turns that volume on or off |
 | `set_directive{directive, state, navpoint, waypoint, audience, progress}` | 68 | see below |
 | `clear_directives()` | 68 | hides the goal |
 | `set_public_event_state{area, leave_seconds, state, player}` | 71 | see below |
@@ -238,8 +239,12 @@ Every method below returns a RequestKey unless the table says otherwise.
 |---|---|---|
 | `players` | boolean | objects that are players |
 | `target` | type-4 slot handle | this one object |
+| `targets` | list of 1 to 8 type-4 slot handles | one test per object |
+| `squad` | type-1 slot handle | this squad |
 | `inside` | type-60 slot handle | objects inside this volume |
 | `inside_any` | list of 1 to 5 type-60 slot handles | objects inside any of these volumes |
+
+All tests share eight places. A filter that needs more is refused.
 
 ### `set_directive`
 
@@ -529,12 +534,13 @@ its `on_event_` prefix.
 | `client_state_changed` | `client_message_sequence`, `payload_bytes`, `activity_state_revision`, `membership_revision`, `region_index`, `current_region_index`, `held_region_index`, `region_slice_set_hash`, `spawn_state`, `teleport_state`, `teleport_slice_set_index`, `teleport_slice_set_hash`, `entered` |
 | `player_trigger` | slot identity; `volume_registry_key`, `volume_slot_type`, `volume_slot_index`, `resolved_object_id` |
 | `trigger_entered`, `trigger_exited` | slot identity; `member_count`, `value`, `all_inside` |
-| `squad_state` | slot identity; `alive_count`, `previous_alive_count`, `removal_flag`, `slot_counts` (list); methods `task_cost{group}`, `task_group{objective}` |
-| `entity_spawned` | slot identity; `member_slot`, `count`, `previous_count` |
-| `entity_died` | slot identity; `alive_count`, `previous_alive_count` |
+| `trigger_state` | slot identity; Sense generation; `available`, `continuity`, `occupied`, `member_count`, `value`, `all_inside`; the last four are nil when `available` is false |
+| `squad_state` | slot identity; Sense generation; `alive_count`, `previous_alive_count`, `removal_flag`, `slot_counts` (list); methods `task_cost{group}`, `task_group{objective}` |
+| `entity_spawned` | slot identity; Sense generation; `member_slot`, `count`, `previous_count` |
+| `entity_died` | slot identity; Sense generation; `alive_count`, `previous_alive_count`, `removal_flag` |
 | `squad_provoked` | `registry_key`, `slot_type`, `slot_index`; **no `slot`** |
 | `damage_state` | slot identity; `health`, `shield`, `revision` |
-| `object_state`, `object_interacted` | slot identity; `generation`, `present`, `alive` (same as `present`), `interaction_open`, `owner_known`, `has_owner`, `owner_key` |
+| `object_state`, `object_interacted` | slot identity; Sense generation; `generation`, `present`, `alive` (same as `present`), `interaction_open`, `owner_known`, `has_owner`, `owner_key`, `initial_observation` (first report of this generation), `entry_index` (the authored entry the object came from), `spawn_mask_low`, `spawn_mask_high` |
 | `device_state` | slot identity; `position`, `power`, `lock`, `position_sequence`, `power_sequence`, `lock_sequence`, `first_report`, `reset`; method `applied_request{channel}` |
 | `ghost_link_state` | slot identity; `generation`, `progress`, `active` |
 | `actor_path_state` | slot identity; `generation`, `revision`, `path_state`, `delivery_revision`, `delivery_state`, `suppressed` |
@@ -556,6 +562,19 @@ its `on_event_` prefix.
 | `auth_state_committed`, `auth_state_transport_staged`, `auth_state_canceled` | `state_revision`; no `mission_sequence` |
 | `scriptable_override_committed`, `scriptable_override_transport_staged`, `scriptable_override_canceled` | `scriptable_revision`; no `mission_sequence` |
 | `operator_refused` | `state_revision`; no `mission_sequence` |
+
+"Sense generation" is two fields, each nil when the report did not carry it:
+
+| field | meaning |
+|---|---|
+| `spawn_generation` | the spawn generation a squad report echoes from its placement |
+| `sense_generation` | the report's record counter, plus one |
+
+`trigger_state` comes from a type-30 occupancy monitor on every report it accepts, the first one
+included. It skips a stale report and an exact repeat. `continuity` says how the report relates to
+the one before: `baseline`, `consecutive`, `duplicate`, `conflict`, `gap`, `reset`,
+`missing_counter`, `wrap` or `invalid`. The event only informs. `trigger_entered` and
+`trigger_exited` still follow the occupancy level alone.
 
 On `incident_canceled` the four body fields are 0 when there is no record. On `incident_refused`,
 `incident_revision` is always 0. On `operator_refused`, `state_revision` is 0 on most refusals.

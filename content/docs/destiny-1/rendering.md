@@ -1,6 +1,6 @@
 ---
 title: "Rendering"
-date: 2026-10-15
+date: 2026-11-08
 description: "The engine's render layer on PS4: the backend boundary, resources, surfaces, command recording and submission, draws, state, and what the GPU hands back to the CPU."
 weight: 30
 ---
@@ -369,9 +369,12 @@ twin, so the twin holds the GPU's tiled layout, not plain rows.
 next of its three surfaces each frame and reads the one drawn the frame before. Shadow fitting draws
 one of two surfaces and reads the other.
 
-Each exposure step moves at most 5% of the gap, clamped to -1 to 1, and only when the last 6
-targets lie on one side. The step runs once a frame, not once a second. So at a higher frame rate,
-exposure settles faster, for example after a loading screen.
+The exposure is clamped to -1 to 1. In normal mode a step moves it by a share of the gap, up to a
+cap, and only once the last N targets agree. The share, the cap and N, from 1 to 60, come from the
+render packet. A fast mode moves 0.85 of the gap each step. The step runs once a frame, not once a
+tick, and its blends and its window count steps. So at a higher frame rate, exposure settles
+faster, for example after a loading screen. See
+[Time and frame pacing](/docs/destiny-1/time-and-frame-pacing/#code-that-steps-once-a-frame).
 
 ### Surface copies below the render API
 

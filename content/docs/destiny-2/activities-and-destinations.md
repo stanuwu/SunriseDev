@@ -1,6 +1,6 @@
 ---
 title: "Activities and destinations"
-date: 2026-10-15
+date: 2026-11-08
 description: "The activity and destination tables, how the client loads a level and picks a spawn point, how a mission is authored, public regions and waypoints."
 weight: 40
 ---
@@ -73,6 +73,17 @@ Notes:
 
 For example, Leviathan is activity 565, internal name `raid_gluttony_0`, type 7, destination 11.
 Its variants need power 750.
+
+### Movie rows
+
+17 of the 1170 activity rows play a movie. The client-half record names the movie's package tag by
+name hash at `+64`; `0x811C9DC5` means no movie. A movie row has no scenario and loads no map.
+Bootflow goes from orbit straight to step 39, `activity:watch_video`, which plays the movie and
+needs no Activity Host.
+
+The row names the activity that follows it. After the movie the client launches that row by
+itself, so the host sends nothing to continue the chain. For example, Homecoming is row 265, the
+movie, then row 266, the playable mission.
 
 ### The activity type and its kind byte
 
@@ -209,7 +220,9 @@ struct SliceSetState {                  /* 76 bytes, class 0x8080924F */
     uint8_t  enabled;                   /* +0x00 */
     uint8_t  pad0[3];
     uint32_t stateNameHash;             /* +0x04 */
-    uint8_t  unmapped[20];
+    uint8_t  unmapped0[4];
+    uint8_t  isPublic;                  /* +0x0C  1 = a public region */
+    uint8_t  unmapped1[15];
     uint32_t mapBubbleIndex;            /* +0x1C  the bubble's number on its map */
     uint8_t  flags[32];                 /* +0x20  ORed into the world object */
     uint32_t ownerBubbleHash;           /* +0x40 */
@@ -220,7 +233,8 @@ struct SliceSetState {                  /* 76 bytes, class 0x8080924F */
 ```
 
 A bubble's states each take one slice set. A bubble owns a run of 8 slice-set indices, so its first
-state's index is `bubble * 8`. Sunrise has the same rule in
+state's index is `bubble * 8`, and state `s` is `bubble * 8 + s`. A region index and a slice-set
+index are the same number. Sunrise has the same rule in
 `src/middleware/content/packages/tables/region_reader.h`:
 
 ```c
@@ -240,6 +254,16 @@ The client refuses any other value with a `slice-set state` error. It also refus
 bubble has no states. So the rule per bubble is
 `state = (stateCount > 0) ? 0 : -1`. That is also the client's own default. For the Tower the eight
 values are `0 0 0 0 -1 -1 0 0`.
+
+### Each slice set has its own object registry
+
+Each slice set names an object registry. The client looks up a roster key only in the registry of
+the slice set it has loaded now. The roster never creates objects. It binds to objects that slice
+set already loaded. A group whose object is not in the current registry is skipped with no error.
+
+Two states of one bubble can have disjoint registries. In the Leviathan berth, state 0 holds the
+playable objects and state 1 holds the opening cinematic. While state 0 is loaded, the cinematic's
+slots cannot apply, and the other way round.
 
 ### Map bubbles and containers
 
@@ -607,7 +631,30 @@ the tile. Whether the tile is present at all depends on its graph and row resolv
 
 A destination is split into regions. A private region belongs to one fireteam. A public region, such
 as a patrol space or a strike, is shared with players the matchmaker finds. Whether a region is
-public is package content, read when a slice-set transition starts.
+public is package content: byte `+0x0C` of the bubble's first slice-set state record, read when a
+slice-set transition starts.
+
+The client names a region itself, as `PRV` or `PUB`, then the membership region and the slice-set
+index, for example `PRV16.16`. The two numbers are often equal, but they are separate fields.
+
+### What starts and ends a transition
+
+The host names the region the client moves to.
+
+| when | the host sends |
+|---|---|
+| on entry | activity message 1: the slice-set index and spawn hash in its state block |
+| mid-activity | activity message 12: a host teleport, with a state, a token, a slice-set index and a name hash |
+
+A transition finishes only when the host publishes a region record in message 12's membership
+block. The block holds a table of up to 64 region records of 232 bytes. The client waits for the
+record whose first dword is its target region and whose byte for its own member slot equals its
+transition token. Until then it logs `is ready for switch, but we do not yet have valid
+host-tabulated data for it. Waiting.` about once a second, with no timeout.
+
+After a host teleport, the client reports its own teleport state back as 0 when it has spawned. The
+host's answer to that report must clear the teleport block. Otherwise the client holds the teleport
+screen.
 
 ### The transition stages
 
@@ -693,7 +740,10 @@ The in-world waypoint is driven by live marker objects, not by the Director. The
 tracked marker. They do not create a marker.
 
 - Activity and world objects register markers with a marker manager. The HUD list holds at most 16.
-  Slot type 68's Auth registers up to 13 of them.
+  Slot type 68's Auth registers up to 13 of them. One body is enough: the client re-registers them
+  on its own tick.
+- A type-68 lane can name a volume, with marker mode 2. While the player is inside that volume, the
+  marker never becomes the selected tracker.
 - A marker is skipped when it is disabled, its position is not finite, its W lane is not 1.0, or its
   position is the zero sentinel.
 - The client picks the nearest eligible candidate as the selected tracker. It passes the target

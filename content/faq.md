@@ -190,10 +190,14 @@ person opens it with their own installation.
 
 ### Can I change the game while it runs?
 
-Script changes, yes: **Build > Update running game** reloads a mod's scripts in a running game.
-Package changes need **Build and install** and a game restart. See
-[Update a running game](/docs/sunrise-studio/build-and-install/#update-a-running-game). The Live tab also shows the running
-game's screens and world; see [Connect to a running game](/docs/sunrise-studio/live/).
+Partly. **Build > Update running game** reloads a mod's scripts in a running game. It also sends
+changed package data. A change of numbers only that keeps a tag's size shows after **Reload
+bubble**. Any other package change, such as a new reference or a new entry, still needs **Build and
+install** and a game restart. See
+[Update a running game](/docs/sunrise-studio/build-and-install/#update-a-running-game) and
+[Package changes in a running game](/docs/sunrise/mods/#package-changes-in-a-running-game). The
+Live tab also shows the running game's screens and world; see
+[Connect to a running game](/docs/sunrise-studio/live/).
 
 ## Still having issues?
 

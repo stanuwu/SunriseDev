@@ -1,6 +1,6 @@
 ---
 title: "Items, characters and inventory"
-date: 2026-10-15
+date: 2026-11-08
 description: "The account, character and item objects the client holds, and the package tables they point into."
 weight: 30
 ---
@@ -93,6 +93,8 @@ The character object holds one character's inventory and equipment.
 | `+11456` | the equipped item instance ids, 20 u64, one per equipment slot |
 | `+11616` | the equipment and light summary |
 | `+12032` | the part the client writes back to the server (5360 bytes) |
+| `+12088` | the roster mirror: 20 records of 144 bytes, the client's own copy of the roster |
+| `+15144` | the last-orbited destination, a destination hash |
 | `+17392` | character progressions, 127 rows of 16 bytes |
 | `+19424` | the periodic-reset struct |
 | `+37704` | character unlock flags |
@@ -103,6 +105,14 @@ are placed per bucket, so rows can have gaps.
 
 The range at `+12032` is the only range the client sends back. The client compares it with its own
 copy and resends until they match. Every other range is server state.
+
+The roster mirror is client state. A record with a non-zero first word is a roster member, so a
+server sends the whole block as zeros. A non-zero key there is a phantom member that takes a record
+the real members need.
+
+The last-orbited destination must be a destination that belongs to an Orbit slice set. Naming any
+other destination row makes the orbit map log `Failed to find the Orbit slice-set name for
+destination` until the client falls back to another destination.
 
 ### An inventory entry
 
